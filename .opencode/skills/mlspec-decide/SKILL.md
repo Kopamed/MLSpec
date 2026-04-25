@@ -6,6 +6,7 @@ compatibility: Requires openspec CLI and MLSpec workspace
 metadata:
   author: openspec
   version: "1.0"
+  generatedBy: "1.3.1"
 ---
 
 Interpret evidence and write a decision for an MLSpec experiment.
@@ -59,7 +60,7 @@ mlspec-decide cutmix --decision reject
 
 5. **Create decision**
    ```bash
-   openspec ml decide <experiment> --decision <type> [--target-candidate <name>]
+   mlspec decide <experiment> --decision <type> [--target-candidate <name>]
    ```
    This creates `experiments/<name>/decision.md`
 
@@ -78,7 +79,7 @@ mlspec-decide cutmix --decision reject
 
 7. **Validate decision**
    ```bash
-   openspec ml validate
+   mlspec validate
    ```
    Fix any errors (e.g., placeholder values in decision fields).
 

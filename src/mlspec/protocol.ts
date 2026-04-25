@@ -33,21 +33,21 @@ This document describes the protocol for AI coding agents running ML experiments
 
 ## After Running
 
-7. **Create evidence file** using \`openspec ml add-evidence <experiment> --level E1\`:
+7. **Create evidence file** using \`mlspec add-evidence <experiment> --level E1\`:
    - Record actual_command (the exact command run)
    - Record changed_files (what you actually modified)
    - Record metrics with actual numbers
    - Interpret: is there a signal?
    - Recommend: promote/reject/retry/inconclusive/hold
 
-8. **Make a decision** using \`openspec ml decide <experiment> --decision <decision>\`:
+8. **Make a decision** using \`mlspec decide <experiment> --decision <decision>\`:
    - Base on evidence, not intuition
    - State reasoning explicitly
    - If promote: specify target candidate
 
-9. **Promote if warranted** using \`openspec ml promote <experiment> --to <candidate>\`.
+9. **Promote if warranted** using \`mlspec promote <experiment> --to <candidate>\`.
 
-10. **Archive completed experiments** using \`openspec ml archive <experiment>\`.
+10. **Archive completed experiments** using \`mlspec archive <experiment>\`.
 
 ## Evidence Levels
 
@@ -90,7 +90,7 @@ Agents using W&B, MLflow, or cloud training can reference those paths in the evi
 
 ## Validation
 
-Run \`openspec ml validate\` to check for issues:
+Run \`mlspec validate\` to check for issues:
 
 - **Errors**: Structural problems (missing files, broken YAML, evidence without hypothesis)
 - **Warnings**: Protocol issues (missing actual_command, placeholder values, thin evidence for promote)

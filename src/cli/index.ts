@@ -16,7 +16,6 @@ import { CompletionCommand } from '../commands/completion.js';
 import { FeedbackCommand } from '../commands/feedback.js';
 import { registerConfigCommand } from '../commands/config.js';
 import { registerSchemaCommand } from '../commands/schema.js';
-import { registerMlspecCommand } from '../mlspec/cli.js';
 import {
   statusCommand,
   instructionsCommand,
@@ -31,6 +30,7 @@ import {
   type SchemasOptions,
   type NewChangeOptions,
 } from '../commands/workflow/index.js';
+import { registerMlspecCommand } from '../mlspec/cli.js';
 import { maybeShowTelemetryNotice, trackCommand, shutdown } from '../telemetry/index.js';
 
 const program = new Command();

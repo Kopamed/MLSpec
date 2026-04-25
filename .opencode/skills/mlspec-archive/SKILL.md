@@ -6,6 +6,7 @@ compatibility: Requires openspec CLI and MLSpec workspace
 metadata:
   author: openspec
   version: "1.0"
+  generatedBy: "1.3.1"
 ---
 
 Archive a decided MLSpec experiment.
@@ -42,7 +43,7 @@ mlspec-archive roi-cropping
 
 4. **Archive the experiment**
    ```bash
-   openspec ml archive <experiment>
+   mlspec archive <experiment>
    ```
    This moves the experiment to `archive/<decision_subdir>/<name>/`
 
@@ -59,7 +60,7 @@ mlspec-archive roi-cropping
 
 7. **Validate workspace**
    ```bash
-   openspec ml validate
+   mlspec validate
    ```
    Fix any errors.
 

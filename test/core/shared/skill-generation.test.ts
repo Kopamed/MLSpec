@@ -8,9 +8,9 @@ import {
 
 describe('skill-generation', () => {
   describe('getSkillTemplates', () => {
-    it('should return all 11 skill templates', () => {
+    it('should return all 17 skill templates', () => {
       const templates = getSkillTemplates();
-      expect(templates).toHaveLength(11);
+      expect(templates).toHaveLength(17);
     });
 
     it('should have unique directory names', () => {
@@ -35,6 +35,12 @@ describe('skill-generation', () => {
       expect(dirNames).toContain('openspec-verify-change');
       expect(dirNames).toContain('openspec-onboard');
       expect(dirNames).toContain('openspec-propose');
+      expect(dirNames).toContain('mlspec-explore');
+      expect(dirNames).toContain('mlspec-propose-experiment');
+      expect(dirNames).toContain('mlspec-run-evidence');
+      expect(dirNames).toContain('mlspec-decide');
+      expect(dirNames).toContain('mlspec-promote');
+      expect(dirNames).toContain('mlspec-archive');
     });
 
     it('should have valid template structure', () => {
@@ -88,9 +94,9 @@ describe('skill-generation', () => {
   });
 
   describe('getCommandTemplates', () => {
-    it('should return all 11 command templates', () => {
+    it('should return all 17 command templates', () => {
       const templates = getCommandTemplates();
-      expect(templates).toHaveLength(11);
+      expect(templates).toHaveLength(17);
     });
 
     it('should have unique IDs', () => {
@@ -142,9 +148,9 @@ describe('skill-generation', () => {
   });
 
   describe('getCommandContents', () => {
-    it('should return all 11 command contents', () => {
+    it('should return all 17 command contents', () => {
       const contents = getCommandContents();
-      expect(contents).toHaveLength(11);
+      expect(contents).toHaveLength(17);
     });
 
     it('should have valid content structure', () => {
@@ -296,6 +302,98 @@ describe('skill-generation', () => {
 
       expect(content).toContain('Some REPLACED text here.');
       expect(content).not.toContain('PLACEHOLDER');
+    });
+  });
+
+  describe('MLSpec workflows', () => {
+    const MLSPEC_WORKFLOWS = [
+      'mlspec-explore',
+      'mlspec-propose-experiment',
+      'mlspec-run-evidence',
+      'mlspec-decide',
+      'mlspec-promote',
+      'mlspec-archive',
+    ];
+
+    it('should return all 6 MLSpec skill templates when filtered', () => {
+      const filtered = getSkillTemplates(MLSPEC_WORKFLOWS);
+      expect(filtered).toHaveLength(6);
+    });
+
+    it('should have correct directory names for MLSpec skills', () => {
+      const filtered = getSkillTemplates(MLSPEC_WORKFLOWS);
+      const dirNames = filtered.map(t => t.dirName);
+      for (const workflow of MLSPEC_WORKFLOWS) {
+        expect(dirNames).toContain(workflow);
+      }
+    });
+
+    it('should have correct workflow IDs for MLSpec skills', () => {
+      const filtered = getSkillTemplates(MLSPEC_WORKFLOWS);
+      const workflowIds = filtered.map(t => t.workflowId);
+      for (const workflow of MLSPEC_WORKFLOWS) {
+        expect(workflowIds).toContain(workflow);
+      }
+    });
+
+    it('should have valid template structure for MLSpec skills', () => {
+      const filtered = getSkillTemplates(MLSPEC_WORKFLOWS);
+      for (const { template, dirName, workflowId } of filtered) {
+        expect(template.name).toBeTruthy();
+        expect(template.description).toBeTruthy();
+        expect(template.instructions).toBeTruthy();
+        expect(dirName).toBeTruthy();
+        expect(workflowId).toBeTruthy();
+        expect(template.name).toBe(workflowId);
+      }
+    });
+
+    it('should return all 6 MLSpec command templates when filtered', () => {
+      const filtered = getCommandTemplates(MLSPEC_WORKFLOWS);
+      expect(filtered).toHaveLength(6);
+    });
+
+    it('should have correct IDs for MLSpec commands', () => {
+      const filtered = getCommandTemplates(MLSPEC_WORKFLOWS);
+      const ids = filtered.map(t => t.id);
+      for (const workflow of MLSPEC_WORKFLOWS) {
+        expect(ids).toContain(workflow);
+      }
+    });
+
+    it('should have valid content structure for MLSpec commands', () => {
+      const filtered = getCommandTemplates(MLSPEC_WORKFLOWS);
+      for (const { template, id } of filtered) {
+        expect(template.name).toBeTruthy();
+        expect(template.description).toBeTruthy();
+        expect(template.content).toBeTruthy();
+        expect(template.category).toBeTruthy();
+        expect(template.tags).toBeTruthy();
+        expect(Array.isArray(template.tags)).toBe(true);
+        expect(id).toBeTruthy();
+      }
+    });
+
+    it('should generate MLSpec skill content with correct frontmatter', () => {
+      const filtered = getSkillTemplates(['mlspec-explore']);
+      const content = generateSkillContent(filtered[0].template, '5.9.3');
+
+      expect(content).toMatch(/^---\n/);
+      expect(content).toContain('name: mlspec-explore');
+      expect(content).toContain('generatedBy: "5.9.3"');
+      expect(content).toContain('Explore ML experiment ideas');
+    });
+
+    it('should generate command contents for MLSpec workflows', () => {
+      const contents = getCommandContents(MLSPEC_WORKFLOWS);
+      expect(contents).toHaveLength(6);
+
+      for (const content of contents) {
+        expect(content.id).toMatch(/^mlspec-/);
+        expect(content.name).toBeTruthy();
+        expect(content.description).toBeTruthy();
+        expect(content.body).toBeTruthy();
+      }
     });
   });
 });

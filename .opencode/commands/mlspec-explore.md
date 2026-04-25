@@ -1,11 +1,5 @@
 ---
-name: mlspec-explore
 description: Explore ML experiment ideas and analyze problems. Use when the user wants to think through an ML problem, investigate failures, or brainstorm experiment approaches before committing to a direction.
-license: MIT
-compatibility: Requires openspec CLI and MLSpec workspace
-metadata:
-  author: openspec
-  version: "1.0"
 ---
 
 Explore ML experiment ideas and analyze problems.
@@ -34,8 +28,8 @@ How do I improve this competition score?
 
 2. **Read MLSpec workspace context**
    - Check `mlspec/evaluation.md` for project overview
-   - List baselines: `openspec ml status` (baselines section)
-   - List candidates: `openspec ml status` (candidates section)
+   - List baselines: `mlspec status` (baselines section)
+   - List candidates: `mlspec status` (candidates section)
    - Read current findings if present
    - Check for active experiments and their status
 

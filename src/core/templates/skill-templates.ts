@@ -18,3 +18,9 @@ export { getVerifyChangeSkillTemplate, getOpsxVerifyCommandTemplate } from './wo
 export { getOnboardSkillTemplate, getOpsxOnboardCommandTemplate } from './workflows/onboard.js';
 export { getOpsxProposeSkillTemplate, getOpsxProposeCommandTemplate } from './workflows/propose.js';
 export { getFeedbackSkillTemplate } from './workflows/feedback.js';
+export { getMlspecExploreSkillTemplate, getMlspecExploreCommandTemplate } from './workflows/mlspec-explore.js';
+export { getMlspecProposeExperimentSkillTemplate, getMlspecProposeExperimentCommandTemplate } from './workflows/mlspec-propose-experiment.js';
+export { getMlspecRunEvidenceSkillTemplate, getMlspecRunEvidenceCommandTemplate } from './workflows/mlspec-run-evidence.js';
+export { getMlspecDecideSkillTemplate, getMlspecDecideCommandTemplate } from './workflows/mlspec-decide.js';
+export { getMlspecPromoteSkillTemplate, getMlspecPromoteCommandTemplate } from './workflows/mlspec-promote.js';
+export { getMlspecArchiveSkillTemplate, getMlspecArchiveCommandTemplate } from './workflows/mlspec-archive.js';

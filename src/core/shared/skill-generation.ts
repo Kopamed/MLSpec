@@ -16,6 +16,12 @@ import {
   getVerifyChangeSkillTemplate,
   getOnboardSkillTemplate,
   getOpsxProposeSkillTemplate,
+  getMlspecExploreSkillTemplate,
+  getMlspecProposeExperimentSkillTemplate,
+  getMlspecRunEvidenceSkillTemplate,
+  getMlspecDecideSkillTemplate,
+  getMlspecPromoteSkillTemplate,
+  getMlspecArchiveSkillTemplate,
   getOpsxExploreCommandTemplate,
   getOpsxNewCommandTemplate,
   getOpsxContinueCommandTemplate,
@@ -27,6 +33,12 @@ import {
   getOpsxVerifyCommandTemplate,
   getOpsxOnboardCommandTemplate,
   getOpsxProposeCommandTemplate,
+  getMlspecExploreCommandTemplate,
+  getMlspecProposeExperimentCommandTemplate,
+  getMlspecRunEvidenceCommandTemplate,
+  getMlspecDecideCommandTemplate,
+  getMlspecPromoteCommandTemplate,
+  getMlspecArchiveCommandTemplate,
   type SkillTemplate,
 } from '../templates/skill-templates.js';
 import type { CommandContent } from '../command-generation/index.js';
@@ -66,6 +78,12 @@ export function getSkillTemplates(workflowFilter?: readonly string[]): SkillTemp
     { template: getVerifyChangeSkillTemplate(), dirName: 'openspec-verify-change', workflowId: 'verify' },
     { template: getOnboardSkillTemplate(), dirName: 'openspec-onboard', workflowId: 'onboard' },
     { template: getOpsxProposeSkillTemplate(), dirName: 'openspec-propose', workflowId: 'propose' },
+    { template: getMlspecExploreSkillTemplate(), dirName: 'mlspec-explore', workflowId: 'mlspec-explore' },
+    { template: getMlspecProposeExperimentSkillTemplate(), dirName: 'mlspec-propose-experiment', workflowId: 'mlspec-propose-experiment' },
+    { template: getMlspecRunEvidenceSkillTemplate(), dirName: 'mlspec-run-evidence', workflowId: 'mlspec-run-evidence' },
+    { template: getMlspecDecideSkillTemplate(), dirName: 'mlspec-decide', workflowId: 'mlspec-decide' },
+    { template: getMlspecPromoteSkillTemplate(), dirName: 'mlspec-promote', workflowId: 'mlspec-promote' },
+    { template: getMlspecArchiveSkillTemplate(), dirName: 'mlspec-archive', workflowId: 'mlspec-archive' },
   ];
 
   if (!workflowFilter) return all;
@@ -92,6 +110,12 @@ export function getCommandTemplates(workflowFilter?: readonly string[]): Command
     { template: getOpsxVerifyCommandTemplate(), id: 'verify' },
     { template: getOpsxOnboardCommandTemplate(), id: 'onboard' },
     { template: getOpsxProposeCommandTemplate(), id: 'propose' },
+    { template: getMlspecExploreCommandTemplate(), id: 'mlspec-explore' },
+    { template: getMlspecProposeExperimentCommandTemplate(), id: 'mlspec-propose-experiment' },
+    { template: getMlspecRunEvidenceCommandTemplate(), id: 'mlspec-run-evidence' },
+    { template: getMlspecDecideCommandTemplate(), id: 'mlspec-decide' },
+    { template: getMlspecPromoteCommandTemplate(), id: 'mlspec-promote' },
+    { template: getMlspecArchiveCommandTemplate(), id: 'mlspec-archive' },
   ];
 
   if (!workflowFilter) return all;

@@ -554,6 +554,72 @@ describe('InitCommand - profile and detection features', () => {
     expect(await directoryExists(newCommandsDir)).toBe(true);
   });
 
+  it('should generate MLSpec skills and commands for OpenCode with custom profile', async () => {
+    // Set custom profile with MLSpec workflows
+    saveGlobalConfig({
+      featureFlags: {},
+      profile: 'custom',
+      delivery: 'both',
+      workflows: [
+        'propose', 'explore', 'apply', 'archive',
+        'mlspec-explore', 'mlspec-propose-experiment', 'mlspec-run-evidence',
+        'mlspec-decide', 'mlspec-promote', 'mlspec-archive',
+      ],
+    });
+
+    const initCommand = new InitCommand({ tools: 'opencode', force: true });
+    await initCommand.execute(testDir);
+
+    // Verify MLSpec skill files exist
+    const mlspecSkills = [
+      '.opencode/skills/mlspec-explore/SKILL.md',
+      '.opencode/skills/mlspec-propose-experiment/SKILL.md',
+      '.opencode/skills/mlspec-run-evidence/SKILL.md',
+      '.opencode/skills/mlspec-decide/SKILL.md',
+      '.opencode/skills/mlspec-promote/SKILL.md',
+      '.opencode/skills/mlspec-archive/SKILL.md',
+    ];
+    for (const skillPath of mlspecSkills) {
+      const fullPath = path.join(testDir, skillPath);
+      expect(await fileExists(fullPath), `MLSpec skill should exist: ${skillPath}`).toBe(true);
+
+      const content = await fs.readFile(fullPath, 'utf-8');
+      expect(content).toContain('---');
+      expect(content).toContain('name:');
+      expect(content).toContain('description:');
+    }
+
+    // Verify MLSpec command files exist with mlspec-*.md naming
+    const mlspecCommands = [
+      '.opencode/commands/mlspec-explore.md',
+      '.opencode/commands/mlspec-propose-experiment.md',
+      '.opencode/commands/mlspec-run-evidence.md',
+      '.opencode/commands/mlspec-decide.md',
+      '.opencode/commands/mlspec-promote.md',
+      '.opencode/commands/mlspec-archive.md',
+    ];
+    for (const cmdPath of mlspecCommands) {
+      const fullPath = path.join(testDir, cmdPath);
+      expect(await fileExists(fullPath), `MLSpec command should exist: ${cmdPath}`).toBe(true);
+
+      const content = await fs.readFile(fullPath, 'utf-8');
+      expect(content).toContain('---');
+      expect(content).toContain('description:');
+    }
+
+    // Verify existing OpenSpec commands still use opsx-*.md naming
+    const opsxCommands = [
+      '.opencode/commands/opsx-explore.md',
+      '.opencode/commands/opsx-propose.md',
+      '.opencode/commands/opsx-apply.md',
+      '.opencode/commands/opsx-archive.md',
+    ];
+    for (const cmdPath of opsxCommands) {
+      const fullPath = path.join(testDir, cmdPath);
+      expect(await fileExists(fullPath), `OpenSpec command should exist: ${cmdPath}`).toBe(true);
+    }
+  });
+
   it('should preselect configured tools but not directory-detected tools in extend mode', async () => {
     // Simulate existing OpenSpec project (extend mode).
     await fs.mkdir(path.join(testDir, 'openspec'), { recursive: true });

@@ -1,11 +1,5 @@
 ---
-name: mlspec-run-evidence
 description: Run one evidence level for an existing MLSpec experiment. Use when the user wants to execute training and record evidence for an experiment.
-license: MIT
-compatibility: Requires openspec CLI and MLSpec workspace
-metadata:
-  author: openspec
-  version: "1.0"
 ---
 
 Run one evidence level for an existing MLSpec experiment.
@@ -32,7 +26,7 @@ mlspec-run-evidence cutmix --level E2
 
 1. **Validate prerequisites**
    - Confirm MLSpec workspace exists
-   - Confirm experiment exists: `openspec ml status`
+   - Confirm experiment exists: `mlspec status`
    - Check that `hypothesis.md` exists and is filled
    - Check that evidence level does not already exist
 
@@ -50,7 +44,7 @@ mlspec-run-evidence cutmix --level E2
 
 4. **Create evidence scaffold**
    ```bash
-   openspec ml add-evidence <experiment> --level <level>
+   mlspec add-evidence <experiment> --level <level>
    ```
    This creates `experiments/<name>/evidence/<level>.md`
 
@@ -76,7 +70,7 @@ mlspec-run-evidence cutmix --level E2
 
 7. **Validate evidence**
    ```bash
-   openspec ml validate
+   mlspec validate
    ```
    Fix any errors.
 

@@ -1,11 +1,5 @@
 ---
-name: mlspec-promote
 description: Promote an MLSpec experiment to a candidate version. Use when an experiment has a promote decision and should be incorporated into a candidate recipe.
-license: MIT
-compatibility: Requires openspec CLI and MLSpec workspace
-metadata:
-  author: openspec
-  version: "1.0"
 ---
 
 Promote an MLSpec experiment to a candidate version.
@@ -43,7 +37,7 @@ mlspec-promote roi-cropping --to resnet-v2
 
 3. **Promote the experiment**
    ```bash
-   openspec ml promote <experiment> --to <candidate>
+   mlspec promote <experiment> --to <candidate>
    ```
    This:
    - Creates a new candidate version (e.g., v1 → v2)
@@ -62,7 +56,7 @@ mlspec-promote roi-cropping --to resnet-v2
 
 6. **Validate workspace**
    ```bash
-   openspec ml validate
+   mlspec validate
    ```
    Fix any errors.
 

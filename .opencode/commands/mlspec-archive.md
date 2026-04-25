@@ -1,11 +1,5 @@
 ---
-name: mlspec-archive
 description: Archive a decided MLSpec experiment. Use when an experiment has been decided and should be moved to the archive.
-license: MIT
-compatibility: Requires openspec CLI and MLSpec workspace
-metadata:
-  author: openspec
-  version: "1.0"
 ---
 
 Archive a decided MLSpec experiment.
@@ -42,7 +36,7 @@ mlspec-archive roi-cropping
 
 4. **Archive the experiment**
    ```bash
-   openspec ml archive <experiment>
+   mlspec archive <experiment>
    ```
    This moves the experiment to `archive/<decision_subdir>/<name>/`
 
@@ -59,7 +53,7 @@ mlspec-archive roi-cropping
 
 7. **Validate workspace**
    ```bash
-   openspec ml validate
+   mlspec validate
    ```
    Fix any errors.
 

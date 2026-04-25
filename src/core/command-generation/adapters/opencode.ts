@@ -17,6 +17,11 @@ export const opencodeAdapter: ToolCommandAdapter = {
   toolId: 'opencode',
 
   getFilePath(commandId: string): string {
+    // MLSpec commands use mlspec-*.md naming (e.g., mlspec-explore.md)
+    // OpenSpec commands use opsx-<id>.md naming (e.g., opsx-explore.md)
+    if (commandId.startsWith('mlspec-')) {
+      return path.join('.opencode', 'commands', `${commandId}.md`);
+    }
     return path.join('.opencode', 'commands', `opsx-${commandId}.md`);
   },
 

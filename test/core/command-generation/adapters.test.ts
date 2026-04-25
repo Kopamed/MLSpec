@@ -547,6 +547,38 @@ describe('command-generation/adapters', () => {
       expect(output).toContain('/opsx-continue');
       expect(output).toContain('/opsx-apply');
     });
+
+    it('should use mlspec-*.md naming for MLSpec command IDs', () => {
+      const mlspecIds = ['mlspec-explore', 'mlspec-propose-experiment', 'mlspec-run-evidence', 'mlspec-decide', 'mlspec-promote', 'mlspec-archive'];
+      for (const id of mlspecIds) {
+        const filePath = opencodeAdapter.getFilePath(id);
+        expect(filePath).toBe(path.join('.opencode', 'commands', `${id}.md`));
+      }
+    });
+
+    it('should use opsx-*.md naming for non-MLSpec command IDs', () => {
+      const openSpecIds = ['explore', 'propose', 'apply', 'archive', 'new', 'continue'];
+      for (const id of openSpecIds) {
+        const filePath = opencodeAdapter.getFilePath(id);
+        expect(filePath).toBe(path.join('.opencode', 'commands', `opsx-${id}.md`));
+      }
+    });
+
+    it('should format MLSpec command content correctly', () => {
+      const mlspecContent: CommandContent = {
+        id: 'mlspec-explore',
+        name: 'MLSpec: Explore',
+        description: 'Explore ML experiment ideas',
+        category: 'Workflow',
+        tags: ['workflow', 'mlspec', 'ml'],
+        body: 'Explore ML experiment ideas.\n\nDo not run training.',
+      };
+      const output = opencodeAdapter.formatFile(mlspecContent);
+      expect(output).toContain('---\n');
+      expect(output).toContain('description: Explore ML experiment ideas');
+      expect(output).toContain('---\n\n');
+      expect(output).toContain('Explore ML experiment ideas.\n\nDo not run training.');
+    });
   });
 
   describe('qoderAdapter', () => {

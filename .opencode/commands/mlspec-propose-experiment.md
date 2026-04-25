@@ -1,11 +1,5 @@
 ---
-name: mlspec-propose-experiment
 description: Create a new MLSpec experiment with a filled hypothesis. Use when the user wants to formalize an experiment idea with clear hypothesis, success criteria, and evidence plan.
-license: MIT
-compatibility: Requires openspec CLI and MLSpec workspace
-metadata:
-  author: openspec
-  version: "1.0"
 ---
 
 Create a new MLSpec experiment with a filled hypothesis.
@@ -28,13 +22,13 @@ mlspec-propose-experiment cutmix-augmentation
 
 1. **Get experiment context**
    - Ask user for the experiment name if not provided
-   - Confirm MLSpec workspace exists (run `openspec ml status`)
+   - Confirm MLSpec workspace exists (run `mlspec status`)
    - Read `mlspec/evaluation.md` for project context
    - Read relevant baselines and candidates
 
 2. **Create the experiment**
    ```bash
-   openspec ml new experiment <name>
+   mlspec new experiment <name>
    ```
    This creates `experiments/<name>/` with:
    - `.experiment.yaml` metadata
@@ -60,7 +54,7 @@ mlspec-propose-experiment cutmix-augmentation
 
 5. **Validate the experiment**
    ```bash
-   openspec ml validate
+   mlspec validate
    ```
    Fix any errors before finishing.
 
