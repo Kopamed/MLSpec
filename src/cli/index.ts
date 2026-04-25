@@ -16,6 +16,7 @@ import { CompletionCommand } from '../commands/completion.js';
 import { FeedbackCommand } from '../commands/feedback.js';
 import { registerConfigCommand } from '../commands/config.js';
 import { registerSchemaCommand } from '../commands/schema.js';
+import { registerMlspecCommand } from '../mlspec/cli.js';
 import {
   statusCommand,
   instructionsCommand,
@@ -285,6 +286,7 @@ program
 registerSpecCommand(program);
 registerConfigCommand(program);
 registerSchemaCommand(program);
+registerMlspecCommand(program);
 
 // Top-level validate command
 program
