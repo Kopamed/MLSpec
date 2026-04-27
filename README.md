@@ -1,198 +1,122 @@
-<p align="center">
-  <a href="https://github.com/Fission-AI/OpenSpec">
-    <picture>
-      <source srcset="assets/openspec_bg.png">
-      <img src="assets/openspec_bg.png" alt="OpenSpec logo">
-    </picture>
-  </a>
-</p>
+# MLSpec
 
-<p align="center">
-  <a href="https://github.com/Fission-AI/OpenSpec/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Fission-AI/OpenSpec/actions/workflows/ci.yml/badge.svg" /></a>
-  <a href="https://www.npmjs.com/package/@fission-ai/openspec"><img alt="npm version" src="https://img.shields.io/npm/v/@fission-ai/openspec?style=flat-square" /></a>
-  <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" /></a>
-  <a href="https://discord.gg/YctCnvvshC"><img alt="Discord" src="https://img.shields.io/discord/1411657095639601154?style=flat-square&logo=discord&logoColor=white&label=Discord&suffix=%20online" /></a>
-</p>
-
-<details>
-<summary><strong>The most loved spec framework.</strong></summary>
-
-[![Stars](https://img.shields.io/github/stars/Fission-AI/OpenSpec?style=flat-square&label=Stars)](https://github.com/Fission-AI/OpenSpec/stargazers)
-[![Downloads](https://img.shields.io/npm/dm/@fission-ai/openspec?style=flat-square&label=Downloads/mo)](https://www.npmjs.com/package/@fission-ai/openspec)
-[![Contributors](https://img.shields.io/github/contributors/Fission-AI/OpenSpec?style=flat-square&label=Contributors)](https://github.com/Fission-AI/OpenSpec/graphs/contributors)
-
-</details>
-<p></p>
-Our philosophy:
+**An evidence-driven ML experimentation framework for AI agents.**
 
 ```text
-→ fluid not rigid
-→ iterative not waterfall
-→ easy not complex
-→ built for brownfield not just greenfield
-→ scalable from personal projects to enterprises
+Workflow:
+  explore → hypothesis → evidence → decision → candidate → archive → findings
 ```
 
-> [!TIP]
-> **New workflow now available!** We've rebuilt OpenSpec with a new artifact-guided workflow.
->
-> Run `/opsx:propose "your idea"` to get started. → [Learn more here](docs/opsx.md)
+MLSpec gives AI agents a structured methodology for running ML experiments. Instead of ad-hoc trial-and-error, MLSpec guides agents through a disciplined experiment lifecycle with hypothesis validation, evidence collection, and systematic decision-making.
 
-<p align="center">
-  Follow <a href="https://x.com/0xTab">@0xTab on X</a> for updates · Join the <a href="https://discord.gg/YctCnvvshC">OpenSpec Discord</a> for help and questions.
-</p>
-
-<!-- TODO: Add GIF demo of /opsx:propose → /opsx:archive workflow -->
-
-## See it in action
-
-```text
-You: /opsx:propose add-dark-mode
-AI:  Created openspec/changes/add-dark-mode/
-     ✓ proposal.md — why we're doing this, what's changing
-     ✓ specs/       — requirements and scenarios
-     ✓ design.md    — technical approach
-     ✓ tasks.md     — implementation checklist
-     Ready for implementation!
-
-You: /opsx:apply
-AI:  Implementing tasks...
-     ✓ 1.1 Add theme context provider
-     ✓ 1.2 Create toggle component
-     ✓ 2.1 Add CSS variables
-     ✓ 2.2 Wire up localStorage
-     All tasks complete!
-
-You: /opsx:archive
-AI:  Archived to openspec/changes/archive/2025-01-23-add-dark-mode/
-     Specs updated. Ready for the next feature.
-```
-
-<details>
-<summary><strong>OpenSpec Dashboard</strong></summary>
-
-<p align="center">
-  <img src="assets/openspec_dashboard.png" alt="OpenSpec dashboard preview" width="90%">
-</p>
-
-</details>
-
-## Quick Start
+## Installation
 
 **Requires Node.js 20.19.0 or higher.**
 
-Install OpenSpec globally:
-
 ```bash
-npm install -g @fission-ai/openspec@latest
+# Install MLSpec globally
+npm install -g @kopamed/mlspec@latest
+
+# Or use it without installing (npx)
+npx @kopamed/mlspec@latest --help
 ```
 
-Then navigate to your project directory and initialize:
+## Quick Start
 
 ```bash
-cd your-project
-openspec init
+# Navigate to your ML project
+cd your-ml-project
+
+# Initialize MLSpec workspace with AI tool integration
+mlspec init --tools opencode    # for OpenCode
+mlspec init --tools claude      # for Claude Code
+mlspec init --tools cursor      # for Cursor
+
+# Interactive mode (auto-detects tools)
+mlspec init
 ```
 
-Now tell your AI: `/opsx:propose <what-you-want-to-build>`
+## AI Agent Commands
 
-If you want the expanded workflow (`/opsx:new`, `/opsx:continue`, `/opsx:ff`, `/opsx:verify`, `/opsx:sync`, `/opsx:bulk-archive`, `/opsx:onboard`), select it with `openspec config profile` and apply with `openspec update`.
+After initialization, your AI agent can use these slash commands:
 
-> [!NOTE]
-> Not sure if your tool is supported? [View the full list](docs/supported-tools.md) – we support 25+ tools and growing.
->
-> Also works with pnpm, yarn, bun, and nix. [See installation options](docs/installation.md).
+| Command | Description |
+|---------|-------------|
+| `/mlspec-explore` | Explore failure modes and ML experiment ideas |
+| `/mlspec-propose-experiment` | Create an experiment with hypothesis |
+| `/mlspec-run-evidence` | Run an evidence level (E1, E2, etc.) |
+| `/mlspec-decide` | Write a decision from evidence (promote/reject/hold) |
+| `/mlspec-promote` | Promote experiment to candidate version |
+| `/mlspec-archive` | Archive a decided experiment |
 
-## Docs
-
-→ **[Getting Started](docs/getting-started.md)**: first steps<br>
-→ **[Workflows](docs/workflows.md)**: combos and patterns<br>
-→ **[Commands](docs/commands.md)**: slash commands & skills<br>
-→ **[CLI](docs/cli.md)**: terminal reference<br>
-→ **[Supported Tools](docs/supported-tools.md)**: tool integrations & install paths<br>
-→ **[Concepts](docs/concepts.md)**: how it all fits<br>
-→ **[Multi-Language](docs/multi-language.md)**: multi-language support<br>
-→ **[Customization](docs/customization.md)**: make it yours
-
-
-## Why OpenSpec?
-
-AI coding assistants are powerful but unpredictable when requirements live only in chat history. OpenSpec adds a lightweight spec layer so you agree on what to build before any code is written.
-
-- **Agree before you build** — human and AI align on specs before code gets written
-- **Stay organized** — each change gets its own folder with proposal, specs, design, and tasks
-- **Work fluidly** — update any artifact anytime, no rigid phase gates
-- **Use your tools** — works with 20+ AI assistants via slash commands
-
-### How we compare
-
-**vs. [Spec Kit](https://github.com/github/spec-kit)** (GitHub) — Thorough but heavyweight. Rigid phase gates, lots of Markdown, Python setup. OpenSpec is lighter and lets you iterate freely.
-
-**vs. [Kiro](https://kiro.dev)** (AWS) — Powerful but you're locked into their IDE and limited to Claude models. OpenSpec works with the tools you already use.
-
-**vs. nothing** — AI coding without specs means vague prompts and unpredictable results. OpenSpec brings predictability without the ceremony.
-
-## Updating OpenSpec
-
-**Upgrade the package**
+## CLI Commands
 
 ```bash
-npm install -g @fission-ai/openspec@latest
+mlspec status                    # Show workspace status
+mlspec validate                  # Validate workspace structure
+mlspec new experiment <name>    # Create new experiment
+mlspec new baseline <name>      # Create baseline
+mlspec new candidate <name>     # Create candidate
+mlspec add-evidence <exp> --level E1   # Add evidence
+mlspec decide <exp> --decision promote  # Make decision
+mlspec promote <exp> --to <candidate>   # Promote to candidate
+mlspec archive <exp>            # Archive experiment
+mlspec update                   # Refresh skills for tools
 ```
 
-**Refresh agent instructions**
+## Workflow
 
-Run this inside each project to regenerate AI guidance and ensure the latest slash commands are active:
+```
+1. Explore
+   /mlspec-explore
+   → Identify failure modes, understand the problem space
 
-```bash
-openspec update
+2. Hypothesis
+   /mlspec-propose-experiment <name>
+   → Form hypothesis: "I believe X will improve Y because Z"
+
+3. Evidence
+   /mlspec-run-evidence <experiment> --level E1
+   → Run experiments, collect metrics, document results
+
+4. Decision
+   /mlspec-decide <experiment> --decision promote|reject|hold
+   → Evaluate evidence against hypothesis
+
+5. Candidate
+   /mlspec-promote <experiment> --to <candidate-name>
+   → Promote successful experiments to candidate versions
+
+6. Archive
+   /mlspec archive <experiment>
+   → Archive completed experiments with their decisions
 ```
 
-## Usage Notes
+## Workspace Structure
 
-**Model selection**: OpenSpec works best with high-reasoning models. We recommend Opus 4.5 and GPT 5.2 for both planning and implementation.
+```
+mlspec/
+├── baselines/           # Baseline experiments
+├── experiments/         # Active experiments
+│   └── <experiment>/
+│       ├── hypothesis.md
+│       ├── evidence/
+│       │   └── E1.md
+│       └── decision.md
+├── candidates/          # Promoted candidates
+├── findings/           # Key learnings
+└── archive/           # Archived experiments
+```
 
-**Context hygiene**: OpenSpec benefits from a clean context window. Clear your context before starting implementation and maintain good context hygiene throughout your session.
+## Requirements
 
-## Contributing
+- Node.js 20.19.0+
+- AI coding tool (Claude Code, OpenCode, Cursor, Windsurf, etc.)
 
-**Small fixes** — Bug fixes, typo corrections, and minor improvements can be submitted directly as PRs.
+## Documentation
 
-**Larger changes** — For new features, significant refactors, or architectural changes, please submit an OpenSpec change proposal first so we can align on intent and goals before implementation begins.
-
-When writing proposals, keep the OpenSpec philosophy in mind: we serve a wide variety of users across different coding agents, models, and use cases. Changes should work well for everyone.
-
-**AI-generated code is welcome** — as long as it's been tested and verified. PRs containing AI-generated code should mention the coding agent and model used (e.g., "Generated with Claude Code using claude-opus-4-5-20251101").
-
-### Development
-
-- Install dependencies: `pnpm install`
-- Build: `pnpm run build`
-- Test: `pnpm test`
-- Develop CLI locally: `pnpm run dev` or `pnpm run dev:cli`
-- Conventional commits (one-line): `type(scope): subject`
-
-## Other
-
-<details>
-<summary><strong>Telemetry</strong></summary>
-
-OpenSpec collects anonymous usage stats.
-
-We collect only command names and version to understand usage patterns. No arguments, paths, content, or PII. Automatically disabled in CI.
-
-**Opt-out:** `export OPENSPEC_TELEMETRY=0` or `export DO_NOT_TRACK=1`
-
-</details>
-
-<details>
-<summary><strong>Maintainers & Advisors</strong></summary>
-
-See [MAINTAINERS.md](MAINTAINERS.md) for the list of core maintainers and advisors who help guide the project.
-
-</details>
-
-
+- [OpenSpec Docs](https://github.com/Fission-AI/OpenSpec) - Core framework
+- [Getting Started](docs/getting-started.md) - Step-by-step guide
 
 ## License
 
