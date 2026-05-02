@@ -415,24 +415,51 @@ _Created: ${getCurrentDate()}_
   showCmd
     .command('recipe <id>')
     .description('Show recipe details')
-    .action(async (id: string) => {
+    .option('--json', 'Output machine-readable JSON')
+    .action(async (id: string, options: { json?: boolean }) => {
       try {
         const projectPath = process.cwd();
 
         if (!mlspecWorkspaceExists(projectPath)) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'MLSpec workspace not found. Run "mlspec init" first.' }, null, 2));
+            process.exit(1);
+          }
           ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
           process.exit(1);
         }
 
         const recipePath = resolveMlspecPath(projectPath, 'recipes', id, 'recipe.yaml');
         if (!fs.existsSync(recipePath)) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: `Recipe '${id}' not found` }, null, 2));
+            process.exit(1);
+          }
           ora().fail(`Recipe '${id}' not found`);
           process.exit(1);
         }
 
         const content = fs.readFileSync(recipePath, 'utf-8');
         const parsed = parseYaml(content) as RecipeMetadata;
+        const summaryPath = path.join(path.dirname(recipePath), 'summary.md');
 
+        if (options.json) {
+          const output = {
+            id,
+            name: parsed.name,
+            tags: parsed.tags || [],
+            parent_recipe: parsed.parent_recipe || null,
+            created_by_experiment: parsed.created_by_experiment || null,
+            config: parsed.config || null,
+            metrics: parsed.metrics || null,
+            summary_path: fs.existsSync(summaryPath) ? summaryPath : null,
+            created: parsed.created,
+          };
+          console.log(JSON.stringify(output, null, 2));
+          return;
+        }
+
+        // Human-readable output (default)
         console.log(`\n# Recipe: ${id}\n`);
         console.log(`**Name:** ${parsed.name}`);
         console.log(`**Tags:** ${parsed.tags?.join(', ') || '(none)'}`);
@@ -462,6 +489,10 @@ _Created: ${getCurrentDate()}_
 
         console.log();
       } catch (error) {
+        if (options.json) {
+          console.log(JSON.stringify({ error: (error as Error).message }, null, 2));
+          process.exit(1);
+        }
         ora().fail(`Error: ${(error as Error).message}`);
         process.exit(1);
       }
@@ -852,47 +883,84 @@ outputs/${id}/
   showCmd
     .command('evidence <experiment>')
     .description('Show evidence summary for an experiment')
-    .action(async (experiment: string) => {
+    .option('--json', 'Output machine-readable JSON')
+    .action(async (experiment: string, options: { json?: boolean }) => {
       try {
         const projectPath = process.cwd();
 
         if (!mlspecWorkspaceExists(projectPath)) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'MLSpec workspace not found. Run "mlspec init" first.' }, null, 2));
+            process.exit(1);
+          }
           ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
           process.exit(1);
         }
 
         if (!experimentExists(projectPath, experiment)) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: `Experiment '${experiment}' not found`, experiment_id: experiment }, null, 2));
+            process.exit(1);
+          }
           ora().fail(`Experiment '${experiment}' not found`);
           process.exit(1);
         }
 
         const experimentDir = resolveMlspecPath(projectPath, 'experiments', experiment);
-        const validStages = EvidenceStageSchema.options;
+        const stages: Record<string, {
+          exists: boolean;
+          path: string | null;
+          runs: unknown[] | null;
+          aggregate: Record<string, { mean: number | null; std: number | null }> | null;
+          summary: string | null;
+          recommendation: string | null;
+        }> = {};
 
-        console.log(`\n# Evidence: ${experiment}\n`);
-
-        let hasEvidence = false;
-        for (const stage of validStages) {
+        for (const stage of EvidenceStageSchema.options) {
           const evidencePath = path.join(experimentDir, 'evidence', `${stage}.md`);
           if (fs.existsSync(evidencePath)) {
-            hasEvidence = true;
             try {
               const content = fs.readFileSync(evidencePath, 'utf-8');
               const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
               if (frontmatterMatch) {
                 const parsed = parseYaml(frontmatterMatch[1]) as EvidenceFrontmatter;
-                const runCount = parsed.runs?.length || 0;
-                const recommendation = parsed.recommendation || 'none';
-                console.log(`## ${stage.charAt(0).toUpperCase() + stage.slice(1)}`);
-                console.log(`  - Runs: ${runCount}`);
-                console.log(`  - Recommendation: ${recommendation}`);
-                if (parsed.summary) {
-                  console.log(`  - Summary: ${parsed.summary}`);
-                }
+                stages[stage] = {
+                  exists: true,
+                  path: evidencePath,
+                  runs: parsed.runs || null,
+                  aggregate: parsed.aggregate || null,
+                  summary: parsed.summary || null,
+                  recommendation: parsed.recommendation || null,
+                };
+              } else {
+                stages[stage] = { exists: true, path: evidencePath, runs: null, aggregate: null, summary: null, recommendation: null };
               }
             } catch {
-              console.log(`## ${stage.charAt(0).toUpperCase() + stage.slice(1)}`);
-              console.log('  - (failed to parse)');
+              stages[stage] = { exists: true, path: evidencePath, runs: null, aggregate: null, summary: null, recommendation: null };
+            }
+          } else {
+            stages[stage] = { exists: false, path: null, runs: null, aggregate: null, summary: null, recommendation: null };
+          }
+        }
+
+        if (options.json) {
+          const output = { experiment_id: experiment, stages };
+          console.log(JSON.stringify(output, null, 2));
+          return;
+        }
+
+        // Human-readable output (default)
+        console.log(`\n# Evidence: ${experiment}\n`);
+
+        let hasEvidence = false;
+        for (const stage of EvidenceStageSchema.options) {
+          if (stages[stage].exists) {
+            hasEvidence = true;
+            console.log(`## ${stage.charAt(0).toUpperCase() + stage.slice(1)}`);
+            console.log(`  - Runs: ${(stages[stage].runs as unknown[])?.length || 0}`);
+            console.log(`  - Recommendation: ${stages[stage].recommendation || 'none'}`);
+            if (stages[stage].summary) {
+              console.log(`  - Summary: ${stages[stage].summary}`);
             }
           }
         }
@@ -903,6 +971,10 @@ outputs/${id}/
 
         console.log();
       } catch (error) {
+        if (options.json) {
+          console.log(JSON.stringify({ error: (error as Error).message }, null, 2));
+          process.exit(1);
+        }
         ora().fail(`Error: ${(error as Error).message}`);
         process.exit(1);
       }
@@ -1434,40 +1506,93 @@ outputs/${id}/
   program
     .command('next')
     .description('Read-only router for next action')
-    .action(async () => {
+    .option('--json', 'Output machine-readable JSON')
+    .action(async (options: { json?: boolean }) => {
       try {
         const projectPath = process.cwd();
 
         if (!mlspecWorkspaceExists(projectPath)) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'MLSpec workspace not found. Run "mlspec init" first.' }, null, 2));
+            process.exit(1);
+          }
           ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
           process.exit(1);
         }
 
         const experiments = listExperiments(projectPath);
-        const suggestions: string[] = [];
+        const allRecipes = loadAllRecipes(projectPath);
+        const currentBestRecipes: string[] = [];
+
+        for (const [recipeId, meta] of allRecipes) {
+          if (meta?.tags?.includes('current-best')) {
+            currentBestRecipes.push(recipeId);
+          }
+        }
+
+        const actions: Array<{
+          priority: number;
+          action_type: 'explore' | 'propose' | 'run' | 'resolve' | 'bootstrap' | 'none';
+          suggested_command: string;
+          reason: string;
+          target?: { type: 'experiment' | 'recipe'; id: string };
+        }> = [];
+
+        let priority = 1;
+
+        // Bootstrap detection: empty workspace
+        if (experiments.length === 0 && allRecipes.size === 0) {
+          actions.push({
+            priority,
+            action_type: 'bootstrap',
+            suggested_command: '/mlspec-explore',
+            reason: 'No baseline recipe exists yet. The MLSpec workspace is empty.',
+          });
+          priority++;
+        }
 
         for (const expId of experiments) {
           const expMeta = loadExperimentMetadata(projectPath, expId);
           if (!expMeta) continue;
 
           if (expMeta.status === 'draft') {
-            suggestions.push(`Experiment '${expId}' is in draft status - run 'mlspec set-status ${expId} running' when ready`);
+            actions.push({
+              priority,
+              action_type: 'none',
+              suggested_command: `mlspec set-status ${expId} running`,
+              reason: `Experiment '${expId}' is in draft status`,
+              target: { type: 'experiment', id: expId },
+            });
+            priority++;
             continue;
           }
 
           if (expMeta.status === 'running') {
             // Check abort criteria FIRST (priority per 2.5.6)
             if (expMeta.abort_criteria && expMeta.abort_criteria.length > 0) {
-              suggestions.push(`Experiment '${expId}' has abort criteria - verify they are not met before continuing`);
+              actions.push({
+                priority,
+                action_type: 'run',
+                suggested_command: `mlspec add-evidence ${expId} --stage smoke`,
+                reason: `Experiment '${expId}' has abort criteria that need verification`,
+                target: { type: 'experiment', id: expId },
+              });
+              priority++;
             }
 
             // Check for missing evidence
             const expDir = resolveMlspecPath(projectPath, 'experiments', expId);
-            const validStages = EvidenceStageSchema.options;
-            for (const stage of validStages) {
+            for (const stage of EvidenceStageSchema.options) {
               const evidencePath = path.join(expDir, 'evidence', `${stage}.md`);
               if (!fs.existsSync(evidencePath)) {
-                suggestions.push(`Experiment '${expId}' needs ${stage} evidence - run 'mlspec add-evidence ${expId} --stage ${stage}'`);
+                actions.push({
+                  priority,
+                  action_type: 'run',
+                  suggested_command: `mlspec add-evidence ${expId} --stage ${stage}`,
+                  reason: `Experiment '${expId}' needs ${stage} evidence`,
+                  target: { type: 'experiment', id: expId },
+                });
+                priority++;
                 break;
               }
             }
@@ -1477,21 +1602,50 @@ outputs/${id}/
             // Check if resolution exists
             const resolutionPath = resolveMlspecPath(projectPath, 'experiments', expId, 'resolution.md');
             if (!fs.existsSync(resolutionPath)) {
-              suggestions.push(`Experiment '${expId}' is resolved but missing resolution.md`);
+              actions.push({
+                priority,
+                action_type: 'resolve',
+                suggested_command: `mlspec resolve ${expId}`,
+                reason: `Experiment '${expId}' is resolved but missing resolution.md`,
+                target: { type: 'experiment', id: expId },
+              });
+              priority++;
             }
           }
         }
 
+        // Sort actions by ascending priority
+        actions.sort((a, b) => a.priority - b.priority);
+
+        if (options.json) {
+          const output = {
+            workspace_state: {
+              recipes_count: allRecipes.size,
+              experiments_count: experiments.length,
+              current_best_recipes: currentBestRecipes,
+              current_best_recipe: currentBestRecipes.length === 1 ? currentBestRecipes[0] : null,
+            },
+            actions,
+          };
+          console.log(JSON.stringify(output, null, 2));
+          return;
+        }
+
+        // Human-readable output (default)
         console.log('\n# Next Actions\n');
-        if (suggestions.length === 0) {
+        if (actions.length === 0) {
           console.log('  (no pending actions)');
         } else {
-          for (const suggestion of suggestions) {
-            console.log(`  - ${suggestion}`);
+          for (const action of actions) {
+            console.log(`  - ${action.suggested_command}: ${action.reason}`);
           }
         }
         console.log();
       } catch (error) {
+        if (options.json) {
+          console.log(JSON.stringify({ error: (error as Error).message }, null, 2));
+          process.exit(1);
+        }
         ora().fail(`Error: ${(error as Error).message}`);
         process.exit(1);
       }
@@ -1504,15 +1658,126 @@ outputs/${id}/
   program
     .command('status')
     .description('Show MLSpec workspace status')
-    .action(async () => {
+    .option('--json', 'Output machine-readable JSON')
+    .option('--experiment <id>', 'Show experiment-specific status (requires --json)')
+    .action(async (options: { json?: boolean; experiment?: string }) => {
       try {
         const projectPath = process.cwd();
 
         if (!mlspecWorkspaceExists(projectPath)) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'MLSpec workspace not found. Run "mlspec init" first.' }, null, 2));
+            process.exit(1);
+          }
           ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
           process.exit(1);
         }
 
+        // Experiment-specific status (JSON-only)
+        if (options.experiment) {
+          if (!options.json) {
+            console.log(JSON.stringify({ error: 'This command requires --json flag', experiment_id: options.experiment }, null, 2));
+            process.exit(1);
+          }
+
+          const experimentId = options.experiment;
+          if (!experimentExists(projectPath, experimentId)) {
+            console.log(JSON.stringify({ error: `Experiment '${experimentId}' not found`, experiment_id: experimentId }, null, 2));
+            process.exit(1);
+          }
+
+          const expMeta = loadExperimentMetadata(projectPath, experimentId);
+          if (!expMeta) {
+            console.log(JSON.stringify({ error: `Experiment '${experimentId}' not found`, experiment_id: experimentId }, null, 2));
+            process.exit(1);
+          }
+
+          const expDir = resolveMlspecPath(projectPath, 'experiments', experimentId);
+          const evidenceStages: Record<string, { exists: boolean; path: string | null; recommendation: string | null }> = {};
+          const missingStages: string[] = [];
+
+          for (const stage of EvidenceStageSchema.options) {
+            const evidencePath = path.join(expDir, 'evidence', `${stage}.md`);
+            if (fs.existsSync(evidencePath)) {
+              try {
+                const content = fs.readFileSync(evidencePath, 'utf-8');
+                const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+                if (frontmatterMatch) {
+                  const parsed = parseYaml(frontmatterMatch[1]) as EvidenceFrontmatter;
+                  evidenceStages[stage] = {
+                    exists: true,
+                    path: evidencePath,
+                    recommendation: parsed.recommendation || null,
+                  };
+                } else {
+                  evidenceStages[stage] = { exists: true, path: evidencePath, recommendation: null };
+                }
+              } catch {
+                evidenceStages[stage] = { exists: true, path: evidencePath, recommendation: null };
+              }
+            } else {
+              evidenceStages[stage] = { exists: false, path: null, recommendation: null };
+              missingStages.push(stage);
+            }
+          }
+
+          const hasRecommendation = Object.values(evidenceStages).some(s => s.exists && s.recommendation);
+          const readyToResolve = expMeta.status !== 'resolved' && hasRecommendation;
+
+          const output = {
+            experiment_id: experimentId,
+            status: expMeta.status,
+            base_recipe: expMeta.base_recipe,
+            proposed_recipe: expMeta.proposed_recipe,
+            evidence_stages: evidenceStages,
+            missing_stages: missingStages,
+            has_recommendation: hasRecommendation,
+            ready_to_resolve: readyToResolve,
+          };
+          console.log(JSON.stringify(output, null, 2));
+          return;
+        }
+
+        // General status
+        if (options.json) {
+          const recipes = listRecipes(projectPath);
+          const allRecipes = loadAllRecipes(projectPath);
+          const currentBestRecipes: string[] = [];
+          for (const [recipeId, meta] of allRecipes) {
+            if (meta?.tags?.includes('current-best')) {
+              currentBestRecipes.push(recipeId);
+            }
+          }
+
+          const experiments = listExperiments(projectPath);
+          const grouped: Record<string, string[]> = { draft: [], running: [], resolved: [] };
+          for (const experiment of experiments) {
+            const expMeta = loadExperimentMetadata(projectPath, experiment);
+            if (expMeta) {
+              grouped[expMeta.status || 'draft'].push(experiment);
+            }
+          }
+
+          const output = {
+            recipes: recipes.map(id => ({
+              id,
+              tags: allRecipes.get(id)?.tags || [],
+              has_metrics: !!allRecipes.get(id)?.metrics && Object.keys(allRecipes.get(id)?.metrics || {}).length > 0,
+            })),
+            experiments: {
+              total: experiments.length,
+              by_status: grouped,
+            },
+            current_best_recipes: currentBestRecipes,
+            current_best_recipe: currentBestRecipes.length === 1 ? currentBestRecipes[0] : null,
+            warnings: [] as string[],
+            errors: [] as string[],
+          };
+          console.log(JSON.stringify(output, null, 2));
+          return;
+        }
+
+        // Human-readable output (default)
         console.log('\n# MLSpec Status\n');
 
         const recipes = listRecipes(projectPath);
@@ -1569,6 +1834,10 @@ outputs/${id}/
           }
         }
       } catch (error) {
+        if (options.json) {
+          console.log(JSON.stringify({ error: (error as Error).message }, null, 2));
+          process.exit(1);
+        }
         ora().fail(`Error: ${(error as Error).message}`);
         process.exit(1);
       }

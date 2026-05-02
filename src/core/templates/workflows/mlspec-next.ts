@@ -18,11 +18,22 @@ This is a read-only skill that inspects the workspace and suggests what to do ne
 ## Routing
 
 **1. Try CLI first**
-Run: \`mlspec next\`
-If output shows actions: use CLI routing
+Run: \`mlspec next --json\`
+If JSON output is available and parseable: use structured data from the JSON
 
 **2. Fallback to file inspection**
-If CLI unavailable or unclear: inspect files directly
+If JSON command fails or output is unparseable: inspect files directly
+
+### JSON Output Structure
+
+When using \`mlspec next --json\`, the output contains:
+- \`workspace_state\`: recipes_count, experiments_count, current_best_recipes, current_best_recipe
+- \`actions\`: Array of actions sorted by ascending priority, each with:
+  - \`priority\`: Lower number = higher priority
+  - \`action_type\`: one of explore, propose, run, resolve, bootstrap, none
+  - \`suggested_command\`: The command to run
+  - \`reason\`: Why this action is recommended
+  - \`target\`: Optional { type: 'experiment' | 'recipe', id: string }
 
 ---
 
@@ -221,8 +232,8 @@ This is a read-only skill. It never modifies any files.
 
 **Routing**
 
-1. **Try CLI first**: Run \`mlspec next\`
-2. **Fallback**: File inspection if CLI unavailable
+1. **Try CLI first**: Run \`mlspec next --json\`
+2. **Fallback**: File inspection if JSON unavailable or unparseable
 
 ---
 

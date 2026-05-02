@@ -24,7 +24,14 @@ This skill inspects the mlspec/ workspace to understand current recipes, experim
 
 ## Bootstrap: Empty Workspace Detection
 
-**FIRST**: Check if \`mlspec/recipes/\` is empty (no recipe subdirectories exist).
+**FIRST**: Run \`mlspec status --json\` to detect workspace state.
+
+If the JSON output shows:
+- \`recipes\` array is empty: The workspace is empty (bootstrap mode)
+- \`current_best_recipes\`: Use to detect single vs multiple baselines
+
+If \`mlspec status --json\` fails, fall back to file inspection:
+- Check if \`mlspec/recipes/\` is empty (no recipe subdirectories exist).
 
 If the workspace is empty:
 1. Inspect project structure to understand what exists:
@@ -64,27 +71,34 @@ If the workspace has recipes, continue with normal exploration below.
 
 **What to Inspect**
 
-1. **Recipes** (mlspec/recipes/*/recipe.yaml)
-   - Current-best recipe and its performance
-   - Other recipes and their tags (baseline, candidate, variant)
-   - Parent lineage to understand experiment history
+Prefer JSON CLI commands when available:
 
-2. **Active Experiments** (mlspec/experiments/*/experiment.yaml)
+1. **Workspace Summary**
+   - Run: \`mlspec status --json\` to get recipes and experiments overview
+   - Use \`current_best_recipes\` to identify the current best recipe
+   - Use \`experiments.by_status\` to see all experiments grouped by status
+
+2. **Recipe Details**
+   - Run: \`mlspec show recipe <id> --json\` for full recipe metadata
+   - Includes tags, parent_recipe, config, metrics
+
+3. **Evidence Details**
+   - Run: \`mlspec show evidence <experiment> --json\` for all evidence stages
+   - Includes runs, aggregate, summary, recommendation for each stage
+
+4. **Experiments** (mlspec/experiments/*/experiment.yaml)
    - Status: draft, running, resolved
    - base_recipe and proposed_recipe
    - proposed_change description
    - Existing evidence stages
 
-3. **Evidence** (mlspec/experiments/*/evidence/*.md)
-   - smoke/validation/final evidence files
-   - Runs, metrics, and recommendations
-   - Compare to base recipe metrics
-
-4. **Findings** (mlspec/findings/*.md)
+5. **Findings** (mlspec/findings/*.md)
    - What works and what doesn't
    - Documented lessons from past experiments
 
-5. **Code and Data** (optional)
+6. **Code and Data** (optional)
+
+If JSON commands fail, fall back to file inspection.
    - Inspect model code, preprocessing, training scripts
    - Understand data characteristics
 
@@ -212,6 +226,13 @@ This skill inspects the mlspec/ workspace to understand current recipes, experim
 ---
 
 **What to Inspect**
+
+Prefer JSON CLI commands when available:
+- \`mlspec status --json\` for workspace overview
+- \`mlspec show recipe <id> --json\` for recipe details
+- \`mlspec show evidence <experiment> --json\` for evidence details
+
+Fallback to file inspection if JSON commands fail.
 
 1. **Recipes** (mlspec/recipes/*/recipe.yaml)
    - Current-best recipe and its performance

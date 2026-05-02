@@ -24,7 +24,15 @@ This skill creates an experiment entry and populates hypothesis.md with a well-s
 
 ## Bootstrap Mode: Create First Baseline Recipe
 
-**FIRST**: Check if \`mlspec/recipes/\` is empty (no recipe subdirectories exist).
+**FIRST**: Run \`mlspec status --json\` to detect workspace state.
+
+If the JSON output shows:
+- \`recipes.length === 0\`: Enter bootstrap mode (no recipes exist yet)
+- \`current_best_recipes\`: Array of recipes with 'current-best' tag (use to detect single vs multiple baselines)
+- \`experiments.by_status\`: Object with draft/running/resolved arrays (use to avoid duplicate experiment IDs)
+
+If \`mlspec status --json\` fails, fall back to file inspection:
+- Check if \`mlspec/recipes/\` is empty (no recipe subdirectories exist)
 
 If no recipes exist, enter **bootstrap mode** and create a root baseline recipe (NOT an experiment):
 
@@ -292,6 +300,17 @@ This skill creates an experiment entry with hypothesis. It infers missing contex
 ---
 
 **Input**: experiment ID and optionally base_recipe, proposed_recipe, or change.
+
+---
+
+**Workspace Detection**
+
+Before creating experiments, run \`mlspec status --json\` to detect:
+- Empty workspace → bootstrap mode
+- current_best_recipes → single or multiple baselines (ambiguous if length > 1)
+- experiments.by_status → existing experiments to avoid duplicate IDs
+
+If JSON command fails, fall back to file inspection.
 
 ---
 

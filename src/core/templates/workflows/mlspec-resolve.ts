@@ -30,22 +30,26 @@ This skill reads all evidence for an experiment and creates a resolution. On acc
 Before resolving:
 
 1. **Check experiment status**
-   - Read: \`mlspec/experiments/<id>/experiment.yaml\` → status field
+   - Run: \`mlspec status --experiment <id> --json\`
    - If status === 'resolved':
      - Output blocked state: "Resolution Blocked: Already Resolved"
      - Do NOT proceed
      - Suggest /mlspec-next
+   - Note: \`mlspec status --experiment <id>\` is JSON-only in 2.1.0; it returns JSON error if --json is omitted
 
 2. **Check evidence exists**
-   - If no evidence files exist:
+   - Run: \`mlspec show evidence <id> --json\`
+   - If no evidence stages have \`exists: true\`:
      - Show warning: "No evidence recorded. Resolving without evidence is not recommended."
      - Allow proceed if user confirms
 
 3. **Check for evidence conflicts**
-   - Read recommendation from each evidence file
+   - From \`mlspec show evidence --json\` output, check recommendations across stages
    - If smoke recommends 'accept' but final recommends 'reject' (or vice versa):
      - Output blocked state: "Resolution Blocked: Evidence Conflict"
      - Pause asking how to proceed
+
+If JSON commands fail, fall back to direct file inspection.
 
 ---
 
@@ -246,9 +250,11 @@ This skill resolves an experiment and creates a resolution document.
 
 **Pre-flight Checks**
 
-1. Check experiment status (if 'resolved' → blocked)
-2. Check evidence exists (warn if none)
-3. Check for evidence conflicts
+1. Run \`mlspec status --experiment <id> --json\` to check experiment status
+2. Run \`mlspec show evidence <id> --json\` to check evidence stages and recommendations
+3. Check for evidence conflicts across stages
+
+If JSON commands fail, fall back to file inspection.
 
 ---
 

@@ -116,7 +116,16 @@ If no experiments exist but baseline recipe(s) exist, enter **baseline evaluatio
 
 3. **Before Recording Evidence**
 
-   **Check if evidence exists:**
+   **Pre-flight Check (use JSON if available):**
+
+   Run: \`mlspec status --experiment <id> --json\`
+
+   If JSON output is available, use it to determine:
+   - \`missing_stages\`: Array of stages that have no evidence yet
+   - \`ready_to_resolve\`: Whether the experiment has recommendations and is ready to resolve
+   - \`evidence_stages.<stage>.exists\`: Whether evidence for this stage exists
+
+   If JSON command fails, fall back to file inspection:
    - Path: \`mlspec/experiments/<id>/evidence/<stage>.md\`
    - If exists: CLI will fail with "Evidence at stage '<stage>' already exists"
 
@@ -297,8 +306,11 @@ This skill records evidence at a specific stage (smoke/validation/final).
 
 **Before Recording Evidence**
 
-Check if \`mlspec/experiments/<id>/evidence/<stage>.md\` exists.
-If exists: CLI will fail. Output blocked state.
+Run \`mlspec status --experiment <id> --json\` for pre-flight checks.
+Use \`missing_stages\` and \`evidence_stages.<stage>.exists\` to determine state.
+
+If JSON command fails, fall back to checking file existence at:
+\`mlspec/experiments/<id>/evidence/<stage>.md\`
 
 ---
 
