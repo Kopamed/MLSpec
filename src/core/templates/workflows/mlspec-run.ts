@@ -15,6 +15,72 @@ This skill records evidence for an experiment at a specific stage. It infers the
 
 ---
 
+**Pause if:**
+- Evidence file already exists for the target stage → output blocked state with overwrite/skip options
+- Base recipe has no metrics → "Cannot compare results without baseline metrics."
+- User provides unclear or incomplete results → ask for clarification
+
+---
+
+## Baseline Evaluation Mode
+
+**FIRST**: Check if experiments exist in \`mlspec/experiments/\`.
+
+If no experiments exist but baseline recipe(s) exist, enter **baseline evaluation mode**:
+
+### Baseline Evaluation Steps
+
+1. **Identify Baseline Recipe**
+   - Find recipe with current-best tag
+   - If no current-best tag, use the baseline-tagged recipe
+   - If multiple baseline recipes, infer or ask which to evaluate
+
+2. **Check for Existing Metrics**
+   - If baseline already has metrics: suggest they are established and recommend /mlspec-propose
+   - If baseline has no metrics: offer to run evaluation
+
+3. **Show Inferred Action**
+
+   \`\`\`
+   I'm going to evaluate the baseline recipe:
+   - Recipe: <baseline-id>
+   - Goal: Establish baseline metrics for comparison
+
+   Proceeding...
+   \`\`\`
+
+4. **Record Baseline Metrics**
+   - Update mlspec/recipes/<id>/recipe.yaml top-level \`metrics\` field
+   - May update mlspec/recipes/<id>/summary.md
+   - Must NOT create experiment evidence files (those go under mlspec/experiments/<id>/evidence/)
+
+5. **Baseline Evaluation Output Format**
+
+   \`\`\`
+   ## Baseline Evaluation Complete: <baseline-id>
+
+   ### Metrics Established
+   | Metric | Value |
+   |--------|-------|
+   | accuracy | 0.934 |
+   | f1 | 0.921 |
+
+   ### Summary
+   <Brief summary of baseline behavior>
+
+   ### Next Steps
+   1. Propose first experiment: /mlspec-propose <experiment-id> --from <baseline-id>
+   2. Explore alternatives: /mlspec-explore
+
+   Next: /mlspec-propose
+   \`\`\`
+
+---
+
+## Normal Mode: Experiment Evidence
+
+(When experiments exist, proceed with normal evidence recording below)
+
 **Input**: Optional experiment ID and/or stage.
 
 ---
@@ -48,7 +114,20 @@ This skill records evidence for an experiment at a specific stage. It infers the
    Proceeding...
    \`\`\`
 
-3. **Run or Record**
+3. **Before Recording Evidence**
+
+   **Check if evidence exists:**
+   - Path: \`mlspec/experiments/<id>/evidence/<stage>.md\`
+   - If exists: CLI will fail with "Evidence at stage '<stage>' already exists"
+
+   **If evidence exists:**
+   Output blocked state (see below).
+   Do NOT call \`mlspec add-evidence\`.
+
+   **If evidence does not exist:**
+   Proceed with recording.
+
+4. **Run or Record**
 
    Option A: Run actual training
    \`\`\`bash
@@ -61,13 +140,13 @@ This skill records evidence for an experiment at a specific stage. It infers the
    mlspec add-evidence <experiment> --stage <stage> --metrics '{"accuracy": 0.945}'
    \`\`\`
 
-4. **Update Evidence File**
+5. **Update Evidence File**
    - Read experiment.yaml and hypothesis.md
    - Create/update mlspec/experiments/<id>/evidence/<stage>.md
    - Record runs, metrics, artifacts
    - Set recommendation based on results
 
-5. **Show Summary**
+6. **Show Summary**
 
    \`\`\`
    ## Evidence Recorded: add-roi-cropping (validation)
@@ -84,14 +163,30 @@ This skill records evidence for an experiment at a specific stage. It infers the
    - F1: 0.932 ± 0.002
 
    ### Comparison to Base (rf-mfcc-v1)
-   - Accuracy: +1.1% (0.934 → 0.945)
-   - F1: +0.8% (0.924 → 0.932)
+   - Accuracy: +1.1% (0.934 -> 0.945)
+   - F1: +0.8% (0.924 -> 0.932)
 
    ### Recommendation
    Positive signal! Consider proceeding to final or resolving.
 
-   Next: /mlspec-resolve add-roi-cropping
-   \`\`\`
+    Next: /mlspec-resolve add-roi-cropping
+    \`\`\`
+
+### Blocked: Evidence Exists
+
+\`\`\`
+## Evidence Recording Blocked
+
+Evidence at stage '<stage>' already exists for experiment '<id>'.
+The CLI will fail if you try to overwrite.
+
+**Options:**
+1. **Overwrite** - Delete existing evidence file and record new results
+2. **Skip** - Use existing evidence and take no action
+3. **Cancel** - Stop and use /mlspec-next to find other actions
+
+What would you like to do?
+\`\`\`
 
 ---
 
@@ -132,6 +227,12 @@ recommendation: accept
 
 **Boundaries**
 
+**Baseline Evaluation Mode (no experiments):**
+- Updates: mlspec/recipes/<id>/recipe.yaml top-level \`metrics\` field
+- May update: mlspec/recipes/<id>/summary.md
+- Forbidden: Create experiment evidence files (those go under mlspec/experiments/<id>/evidence/)
+
+**Normal Mode (experiments exist):**
 **Must Do:**
 - Read experiment.yaml and hypothesis.md
 - Confirm base_recipe and proposed_change
@@ -158,7 +259,7 @@ Which experiment should I record evidence for?
 `,
     license: 'MIT',
     compatibility: 'Requires MLSpec v2 workspace',
-    metadata: { author: 'openspec', version: '2.0' },
+    metadata: { author: 'mlspec', version: '2.0' },
   };
 }
 
@@ -171,6 +272,12 @@ export function getMlspecRunCommandTemplate(): CommandTemplate {
     content: `Run or record evidence for an experiment.
 
 This skill records evidence at a specific stage (smoke/validation/final).
+
+---
+
+**Pause if:**
+- Evidence file already exists → blocked state (overwrite/skip/cancel)
+- Base recipe has no metrics → "Cannot compare without baseline metrics"
 
 ---
 
@@ -188,13 +295,30 @@ This skill records evidence at a specific stage (smoke/validation/final).
 
 ---
 
+**Before Recording Evidence**
+
+Check if \`mlspec/experiments/<id>/evidence/<stage>.md\` exists.
+If exists: CLI will fail. Output blocked state.
+
+---
+
 **Steps**
 
 1. **Infer/Confirm** experiment ID and stage
 2. **Show Inferred Action**
-3. **Run Training or Record Results**
-4. **Update evidence/<stage>.md**
-5. **Show Summary**
+3. **Check for existing evidence** (if exists → blocked state)
+4. **Run Training or Record Results**
+5. **Update evidence/<stage>.md**
+6. **Show Summary**
+
+---
+
+**Blocked State: Evidence Exists**
+
+Options:
+1. **Overwrite** - Delete file and record new results
+2. **Skip** - Use existing evidence, take no action
+3. **Cancel** - Stop, use /mlspec-next
 
 ---
 

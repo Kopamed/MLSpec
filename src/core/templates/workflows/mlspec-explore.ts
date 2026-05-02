@@ -15,6 +15,49 @@ This skill inspects the mlspec/ workspace to understand current recipes, experim
 
 ---
 
+**Pause if:**
+- User requests file creation → "Explore mode is read-only. Use /mlspec-propose to create experiments."
+- User requests training execution → "Explore mode is for analysis only. Use /mlspec-run to execute experiments."
+- User asks to resolve/accept/reject → "Resolve decisions require evidence. Use /mlspec-resolve after evidence is recorded."
+
+---
+
+## Bootstrap: Empty Workspace Detection
+
+**FIRST**: Check if \`mlspec/recipes/\` is empty (no recipe subdirectories exist).
+
+If the workspace is empty:
+1. Inspect project structure to understand what exists:
+   - Training scripts (train.py, train.sh, etc.)
+   - Config files (config.yaml, params.json, etc.)
+   - Output directories
+   - README or documentation
+2. **Greenfield** (no scripts/configs found): Recommend a minimal starter baseline approach, suggest a recipe ID, note that no existing implementation was found
+3. **Brownfield** (scripts/configs found): Identify the likely existing approach, infer a baseline recipe ID from project name or config
+4. **Remain read-only** - do NOT create any files or run any mlspec CLI commands
+5. Output format for empty workspace:
+
+\`\`\`
+## No Recipes Found
+
+### Workspace Status
+No baseline recipe exists yet. The MLSpec workspace is empty.
+
+### Project Inspection
+<Describe what was found in the project - scripts, configs, outputs, etc.>
+
+### Bootstrap Recommendation
+- **Approach**: <minimal starter or identified existing approach>
+- **Suggested baseline ID**: <inferred from project name or config>
+- **Notes**: <greenfield: "No existing ML implementation found" / brownfield: "Existing project detected">
+
+Next: /mlspec-propose <baseline-id>
+\`\`\`
+
+If the workspace has recipes, continue with normal exploration below.
+
+---
+
 **Input**: Optional focus area or question from conversation.
 
 ---
@@ -96,6 +139,21 @@ This skill inspects the mlspec/ workspace to understand current recipes, experim
 Next: /mlspec-propose add-roi-cropping --from rf-mfcc-v1 --proposes rf-mfcc-roi-v1
 \`\`\`
 
+### Blocked: User Requests Modification
+
+\`\`\`
+## Explore Mode Blocked
+
+Explore mode is read-only and cannot create experiments or run training.
+
+**What you can do:**
+1. /mlspec-propose <id> - create a new experiment
+2. /mlspec-run <experiment> <stage> - run evidence collection
+3. /mlspec-resolve <experiment> - resolve an experiment
+
+What would you like to do?
+\`\`\`
+
 ---
 
 **Boundaries**
@@ -110,6 +168,7 @@ Next: /mlspec-propose add-roi-cropping --from rf-mfcc-v1 --proposes rf-mfcc-roi-
 - Create experiment files
 - Run training
 - Resolve experiments
+- In empty workspace: create any files or run any mlspec CLI commands
 
 ---
 
@@ -125,7 +184,7 @@ When genuinely ambiguous, ask one focused question.
 `,
     license: 'MIT',
     compatibility: 'Requires MLSpec v2 workspace',
-    metadata: { author: 'openspec', version: '2.0' },
+    metadata: { author: 'mlspec', version: '2.0' },
   };
 }
 
@@ -138,6 +197,13 @@ export function getMlspecExploreCommandTemplate(): CommandTemplate {
     content: `Explore ML experiment ideas and analyze the workspace.
 
 This skill inspects the mlspec/ workspace to understand current recipes, experiments, evidence, and findings. It reasons about failure modes and proposes possible experiments.
+
+---
+
+**Pause if:**
+- User requests file creation → "Explore mode is read-only."
+- User requests training → "Use /mlspec-run to execute experiments."
+- User asks to resolve/accept/reject → "Use /mlspec-resolve after evidence is recorded."
 
 ---
 
@@ -193,10 +259,17 @@ Next: /mlspec-propose add-roi-cropping
 
 ---
 
-**Boundaries**
+### Blocked: User Requests Modification
 
-**Allowed:** Inspect, reason, propose
-**Forbidden:** Create files, run training, resolve
+## Explore Mode Blocked
+
+Explore mode is read-only and cannot create experiments or run training.
+
+**What you can do:**
+- Propose a new experiment: /mlspec-propose <description>
+- Run training: /mlspec-run <stage> <experiment>
+- Resolve an experiment: /mlspec-resolve <experiment>
+- Ask /mlspec-next for guidance
 
 ---
 

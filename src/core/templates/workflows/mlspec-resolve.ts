@@ -15,7 +15,37 @@ This skill reads all evidence for an experiment and creates a resolution. On acc
 
 ---
 
+**Pause if:**
+- Experiment status is 'resolved' → output "already resolved" blocked state
+- Evidence contradicts itself across stages → output "evidence conflict" blocked state
+
+---
+
 **Input**: Optional experiment ID and resolution type.
+
+---
+
+**Pre-flight Checks**
+
+Before resolving:
+
+1. **Check experiment status**
+   - Read: \`mlspec/experiments/<id>/experiment.yaml\` → status field
+   - If status === 'resolved':
+     - Output blocked state: "Resolution Blocked: Already Resolved"
+     - Do NOT proceed
+     - Suggest /mlspec-next
+
+2. **Check evidence exists**
+   - If no evidence files exist:
+     - Show warning: "No evidence recorded. Resolving without evidence is not recommended."
+     - Allow proceed if user confirms
+
+3. **Check for evidence conflicts**
+   - Read recommendation from each evidence file
+   - If smoke recommends 'accept' but final recommends 'reject' (or vice versa):
+     - Output blocked state: "Resolution Blocked: Evidence Conflict"
+     - Pause asking how to proceed
 
 ---
 
@@ -114,6 +144,8 @@ Show warnings but respect user agency.
 
 **Output Format**
 
+### Success
+
 \`\`\`
 ## Experiment Resolved: add-roi-cropping
 
@@ -134,6 +166,44 @@ Next recommended action:
 \`\`\`
 
 Then run /mlspec-next to show what to do next.
+\`\`\`
+
+### Blocked: Already Resolved
+
+\`\`\`
+## Resolution Blocked: Already Resolved
+
+Experiment '<id>' is already resolved.
+It cannot be resolved again.
+
+**Current status:**
+- Resolution: see \`mlspec/experiments/<id>/resolution.md\`
+- Recipe: <recipe_id> (if accepted)
+
+**What to do:**
+- Use /mlspec-next to find other actions
+- Use /mlspec-run to collect more evidence if needed
+\`\`\`
+
+### Blocked: Evidence Conflict
+
+\`\`\`
+## Resolution Blocked: Evidence Conflict
+
+Evidence stages have conflicting recommendations:
+
+| Stage | Recommendation |
+|-------|---------------|
+| smoke | accept |
+| validation | reject |
+
+**Options:**
+1. **Proceed anyway** - Accept the conflict and resolve with user-provided rationale
+2. **Collect more evidence** - Run /mlspec-run to clarify
+3. **Cancel** - Stop and reconsider
+
+What would you like to do?
+\`\`\`
 
 ---
 
@@ -152,7 +222,7 @@ Then run /mlspec-next to show what to do next.
 `,
     license: 'MIT',
     compatibility: 'Requires MLSpec v2 workspace',
-    metadata: { author: 'openspec', version: '2.0' },
+    metadata: { author: 'mlspec', version: '2.0' },
   };
 }
 
@@ -165,6 +235,20 @@ export function getMlspecResolveCommandTemplate(): CommandTemplate {
     content: `Resolve an experiment based on evidence.
 
 This skill resolves an experiment and creates a resolution document.
+
+---
+
+**Pause if:**
+- Experiment already resolved → blocked state
+- Evidence conflict → blocked state
+
+---
+
+**Pre-flight Checks**
+
+1. Check experiment status (if 'resolved' → blocked)
+2. Check evidence exists (warn if none)
+3. Check for evidence conflicts
 
 ---
 
@@ -183,11 +267,25 @@ This skill resolves an experiment and creates a resolution document.
 **Steps**
 
 1. **Infer/Confirm** experiment and resolution type
-2. **Read All Evidence** - smoke, validation, final
-3. **Show Inferred Action**
-4. **Write resolution.md**
-5. **If accept**: Create recipe node
-6. **Run /mlspec-next**
+2. **Pre-flight checks** (status, evidence, conflicts)
+3. **Read All Evidence** - smoke, validation, final
+4. **Show Inferred Action**
+5. **Write resolution.md**
+6. **If accept**: Create recipe node
+7. **Run /mlspec-next**
+
+---
+
+**Blocked State: Already Resolved**
+
+Experiment is already resolved. Use /mlspec-next.
+
+---
+
+**Blocked State: Evidence Conflict**
+
+Evidence stages have conflicting recommendations.
+Options: proceed anyway / collect more evidence / cancel
 
 ---
 

@@ -15,6 +15,89 @@ This skill creates an experiment entry and populates hypothesis.md with a well-s
 
 ---
 
+**Pause if:**
+- Context is genuinely ambiguous after inference → ask one clarifying question
+- User wants to skip hypothesis definition → "A hypothesis is required for valid experiments."
+- User wants to run training during proposal → "Training happens during /mlspec-run, not /mlspec-propose."
+
+---
+
+## Bootstrap Mode: Create First Baseline Recipe
+
+**FIRST**: Check if \`mlspec/recipes/\` is empty (no recipe subdirectories exist).
+
+If no recipes exist, enter **bootstrap mode** and create a root baseline recipe (NOT an experiment):
+
+### Bootstrap Steps
+
+1. **Infer Baseline Recipe ID**
+   - Infer from project name, config/model name, or ask user
+   - Fallback: use \`baseline-v1\`
+   - If obvious from context, proceed without asking
+
+2. **Show Inferred Action**
+
+   \`\`\`
+   I'm going to create the first baseline recipe:
+   - Recipe ID: <baseline-id>
+   - Tags: baseline, current-best
+   - parent_recipe: null
+   - created_by_experiment: null
+
+   Proceeding...
+   \`\`\`
+
+3. **Create Root Recipe**
+
+   \`\`\`bash
+   mlspec new recipe <baseline-id> --tag baseline
+   mlspec tag recipe <baseline-id> current-best
+   \`\`\`
+
+4. **Greenfield Bootstrap** (no existing scripts/configs):
+   - Create skeletal recipe with TODO config fields
+   - Mark metrics as pending
+   - Output recommendation for implementation work or /mlspec-run
+
+5. **Brownfield Bootstrap** (existing scripts/configs found):
+   - Attempt best-effort metric discovery from:
+     - Local scripts, configs, outputs, logs, notebooks
+     - README or documentation
+     - Local W&B/MLflow artifacts or references if present
+   - No external service access required
+   - Populate metrics in recipe.yaml if clearly discoverable
+   - Leave metrics empty/pending if not clearly discoverable
+
+6. **Bootstrap Output Format**
+
+   \`\`\`
+   ## Baseline Recipe Created: <baseline-id>
+
+   ### Summary
+   - **Type**: Root baseline recipe
+   - **Tags**: baseline, current-best
+   - **parent_recipe**: null
+   - **created_by_experiment**: null
+
+   ### Configuration
+   <TODO: fill in your baseline configuration>
+
+   ### Metrics
+   <pending - run evaluation to establish baseline metrics>
+
+   ### Next Steps
+   1. Implement baseline approach if not yet implemented
+   2. Run /mlspec-run to establish baseline metrics
+
+   Next: /mlspec-run
+   \`\`\`
+
+---
+
+## Normal Mode: Create Experiment
+
+(When at least one recipe already exists, proceed with normal experiment creation below)
+
 **Input**: Experiment ID and optionally base_recipe, proposed_recipe, or change description.
 
 ---
@@ -48,7 +131,7 @@ This skill creates an experiment entry and populates hypothesis.md with a well-s
    - **Controlled Variables**: What stays the same (model type, data split, seeds, evaluation)
    - **Success Criteria**: Metric improvements that justify acceptance
    - **Abort Criteria**: Results that indicate early stopping
-   - **Evidence Plan**: smoke → validation → final progression
+   - **Evidence Plan**: smoke -> validation -> final progression
 
 5. **Validate**
 
@@ -83,6 +166,19 @@ If multiple inferences possible, ask one question.
 ### Hypothesis
 ROI cropping will improve accuracy by >1% while keeping everything else fixed.
 
+### Controlled Variables
+- Feature extraction: MFCC parameters unchanged
+- Classifier: Random Forest same hyperparameters
+- Training data: Same dataset split
+
+### Success Criteria
+- Validation accuracy improvement > 1%
+- No degradation on F1 score
+
+### Abort Criteria
+- Smoke run fails to complete
+- Validation shows accuracy decrease
+
 ### Evidence Plan
 1. smoke: Quick run on subset (does it work?)
 2. validation: Full CV against base
@@ -93,10 +189,31 @@ ROI cropping will improve accuracy by >1% while keeping everything else fixed.
 2. Explore alternatives: /mlspec-explore
 \`\`\`
 
+### Blocked: Context Ambiguous
+
+\`\`\`
+## Proposal Blocked: Context Ambiguous
+
+I need clarification to create a valid experiment:
+
+<specific question>
+
+**Options:**
+1. Answer the question above
+2. Provide more context about what you want to change
+3. Ask /mlspec-explore to identify opportunities
+\`\`\`
+
 ---
 
 **Boundaries**
 
+**Bootstrap Mode (no recipes):**
+- Creates: mlspec/recipes/<id>/recipe.yaml (root recipe with parent_recipe: null, created_by_experiment: null)
+- Tags: baseline, current-best
+- Forbidden: Run training, accept/reject, create experiments
+
+**Normal Mode (recipes exist):**
 **Creates:**
 - mlspec/experiments/<id>/experiment.yaml
 - mlspec/experiments/<id>/hypothesis.md
@@ -109,12 +226,24 @@ ROI cropping will improve accuracy by >1% while keeping everything else fixed.
 **Forbidden:**
 - Run training
 - Accept/reject/retry/hold/inconclusive
-- Create recipe nodes
+- Create recipe nodes (except in bootstrap mode)
 
 ---
 
 **Show Inferred Action Before Executing**
 
+Bootstrap mode (no recipes):
+\`\`\`
+I'm going to create the first baseline recipe:
+- Recipe ID: <baseline-id>
+- Tags: baseline, current-best
+- parent_recipe: null
+- created_by_experiment: null
+
+Proceeding...
+\`\`\`
+
+Normal mode (recipes exist):
 \`\`\`
 I'm going to create experiment "add-roi-cropping":
 - base_recipe: rf-mfcc-v1 (current-best)
@@ -123,10 +252,24 @@ I'm going to create experiment "add-roi-cropping":
 
 Proceeding...
 \`\`\`
+
+**When Genuinely Ambiguous** (bootstrap mode):
+
+If baseline ID or approach is genuinely ambiguous, ask one focused question:
+\`\`\`
+I found multiple possible baseline approaches in your project:
+1. CNN classifier in src/model.py
+2. Traditional ML in train.py
+3. Existing config in params.json
+
+Which should I use as the baseline?
+\`\`\`
+
+If obvious from context (project name, single script, etc.), proceed without asking.
 `,
     license: 'MIT',
     compatibility: 'Requires MLSpec v2 workspace',
-    metadata: { author: 'openspec', version: '2.0' },
+    metadata: { author: 'mlspec', version: '2.0' },
   };
 }
 
@@ -139,6 +282,12 @@ export function getMlspecProposeCommandTemplate(): CommandTemplate {
     content: `Create a new MLSpec experiment from an idea.
 
 This skill creates an experiment entry with hypothesis. It infers missing context from workspace.
+
+---
+
+**Pause if:**
+- Context ambiguous after inference → ask one question
+- User wants to skip hypothesis → "A hypothesis is required."
 
 ---
 
