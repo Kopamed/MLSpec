@@ -1,212 +1,242 @@
 /**
- * MLSpec Entity Types
+ * MLSpec V2 Entity Types
  *
- * These types define the structure of MLSpec entities stored in the mlspec/ workspace.
+ * These types define the structure of MLSpec V2 entities stored in the mlspec/ workspace.
+ * V2 replaces baseline/candidate model with recipe graph, and E1-E5 with smoke/validation/final stages.
  */
 
 import { z } from 'zod';
 
 /**
- * Evidence levels for ML experiments.
- * E0 = hypothesis only (no evidence file)
- * E1-E5 = progressively more rigorous validation
+ * Recipe tags for categorizing recipes.
  */
-export const EvidenceLevelSchema = z.enum(['E0', 'E1', 'E2', 'E3', 'E4', 'E5']);
-export type EvidenceLevel = z.infer<typeof EvidenceLevelSchema>;
+export const RecipeTagSchema = z.enum(['baseline', 'candidate', 'current-best', 'variant', 'archived']);
+export type RecipeTag = z.infer<typeof RecipeTagSchema>;
 
 /**
- * Recommendation from a single evidence file.
+ * Evidence stages for semantic evaluation levels.
  */
-export const RecommendationSchema = z.enum(['promote', 'reject', 'inconclusive', 'retry', 'hold', 'none']);
-export type Recommendation = z.infer<typeof RecommendationSchema>;
+export const EvidenceStageSchema = z.enum(['smoke', 'validation', 'final']);
+export type EvidenceStage = z.infer<typeof EvidenceStageSchema>;
 
 /**
- * Final decision for an experiment.
+ * Resolution types for experiment outcomes.
  */
-export const DecisionSchema = z.enum(['promote', 'reject', 'inconclusive', 'hold', 'retry']);
-export type Decision = z.infer<typeof DecisionSchema>;
+export const ResolutionTypeSchema = z.enum(['accept', 'reject', 'retry', 'hold', 'inconclusive']);
+export type ResolutionType = z.infer<typeof ResolutionTypeSchema>;
 
 /**
- * Reference to an entity being compared against (baseline or candidate).
+ * Experiment status transitions.
  */
-export const ComparisonRefSchema = z.object({
-  entity_type: z.enum(['baseline', 'candidate']),
-  name: z.string().min(1),
-});
-export type ComparisonRef = z.infer<typeof ComparisonRefSchema>;
+export const ExperimentStatusSchema = z.enum(['draft', 'running', 'resolved']);
+export type ExperimentStatus = z.infer<typeof ExperimentStatusSchema>;
 
 /**
- * Metrics delta structure.
+ * Recommendation from evidence file.
  */
-export const MetricsSchema = z.record(z.string(), z.number()).optional();
-export type Metrics = z.infer<typeof MetricsSchema>;
+export const EvidenceRecommendationSchema = z.enum(['accept', 'reject', 'inconclusive', 'retry', 'hold', 'none']);
+export type EvidenceRecommendation = z.infer<typeof EvidenceRecommendationSchema>;
+
+// ============================================================================
+// Recipe Entity
+// ============================================================================
 
 /**
- * Compute information for evidence.
- * Contains domain-relevant fields; not all fields apply to all ML domains.
+ * Recipe config structure containing full ML pipeline definition.
  */
-export const ComputeSchema = z.object({
-  dataset_fraction: z.number().optional(),
-  epochs: z.number().optional(),
-  folds: z.number().optional(),
-  seeds: z.array(z.number()).optional(),
-  runtime: z.string().optional(),
-  accelerator: z.string().optional(),
-  cost: z.number().optional(),
-  token_budget: z.number().optional(),
-  image_size: z.number().optional(),
+export const RecipeConfigSchema = z.object({
+  data: z.record(z.string(), z.any()).optional().describe('Dataset configuration'),
+  preprocessing: z.array(z.string()).optional().describe('Preprocessing steps'),
+  model: z.record(z.string(), z.any()).optional().describe('Model type and hyperparameters'),
+  training: z.record(z.string(), z.any()).optional().describe('Training configuration'),
+  inference: z.record(z.string(), z.any()).optional().describe('Inference configuration'),
+  artifacts: z.record(z.string(), z.any()).optional().describe('Expected artifact files'),
 }).passthrough();
-export type Compute = z.infer<typeof ComputeSchema>;
+export type RecipeConfig = z.infer<typeof RecipeConfigSchema>;
 
 /**
- * Commands executed for evidence.
- * Optional fields for local-file workflows.
+ * Recipe entity metadata (recipe.yaml).
  */
-export const EvidenceCommandsSchema = z.object({
-  planned: z.string().optional(),
-  executed: z.string().optional(),
-}).optional();
-export type EvidenceCommands = z.infer<typeof EvidenceCommandsSchema>;
+export const RecipeMetadataSchema = z.object({
+  entity_type: z.literal('recipe'),
+  schema: z.literal('ml-experiment-v2'),
+  id: z.string().min(1).describe('Globally unique recipe identifier (kebab-case)'),
+  name: z.string().min(1).describe('Human-readable name'),
+  tags: z.array(RecipeTagSchema).default([]).describe('Recipe tags'),
+  parent_recipe: z.string().nullable().optional().describe('Parent recipe ID or null for root'),
+  created_by_experiment: z.string().nullable().optional().describe('Creating experiment ID or null'),
+  config: RecipeConfigSchema.optional().describe('Full ML pipeline configuration'),
+  metrics: z.record(z.string(), z.number()).optional().describe('Achieved performance metrics'),
+  created: z.string().describe('ISO timestamp'),
+});
+export type RecipeMetadata = z.infer<typeof RecipeMetadataSchema>;
+
+// ============================================================================
+// Experiment Entity
+// ============================================================================
 
 /**
- * Artifacts produced by evidence.
- * Optional fields for local-file workflows.
+ * Experiment entity metadata (experiment.yaml).
  */
-export const EvidenceArtifactsSchema = z.object({
-  metrics_file: z.string().optional(),
-  checkpoint: z.string().optional(),
-  predictions: z.string().optional(),
-  log_file: z.string().optional(),
-  changed_files: z.array(z.string()).optional(),
-}).optional();
-export type EvidenceArtifacts = z.infer<typeof EvidenceArtifactsSchema>;
+export const ExperimentMetadataSchema = z.object({
+  entity_type: z.literal('experiment'),
+  schema: z.literal('ml-experiment-v2'),
+  id: z.string().min(1).describe('Experiment identifier'),
+  status: ExperimentStatusSchema.default('draft').describe('Experiment status'),
+  base_recipe: z.string().describe('Reference to recipe being modified'),
+  proposed_recipe: z.string().describe('Proposed recipe ID (not yet created)'),
+  proposed_change: z.string().describe('Description of what changes from base'),
+  controlled_variables: z.array(z.string()).optional().describe('What stays fixed'),
+  success_criteria: z.array(z.string()).optional().describe('Metric thresholds for acceptance'),
+  abort_criteria: z.array(z.string()).optional().describe('Conditions for early termination'),
+  evidence_plan: z.array(EvidenceStageSchema).optional().describe('Planned evidence stages'),
+  created: z.string().describe('ISO timestamp'),
+});
+export type ExperimentMetadata = z.infer<typeof ExperimentMetadataSchema>;
+
+// ============================================================================
+// Evidence Entity
+// ============================================================================
+
+/**
+ * Single run result within evidence.
+ */
+export const EvidenceRunSchema = z.object({
+  seed: z.number().describe('Random seed used'),
+  command: z.string().describe('Actual command executed'),
+  completed: z.string().describe('ISO timestamp'),
+  duration_minutes: z.number().optional().describe('Execution time in minutes'),
+  metrics: z.record(z.string(), z.number()).describe('Metric values'),
+  artifacts: z.record(z.string(), z.string()).optional().describe('Artifact paths'),
+}).passthrough();
+export type EvidenceRun = z.infer<typeof EvidenceRunSchema>;
+
+/**
+ * Aggregated statistics across runs.
+ * Structure: { metricName: { mean: number|null, std: number|null } }
+ */
+export const EvidenceAggregateSchema = z.record(z.string(), z.object({
+  mean: z.number().nullable(),
+  std: z.number().nullable(),
+}).passthrough()).optional().describe('Aggregated statistics');
+export type EvidenceAggregate = z.infer<typeof EvidenceAggregateSchema>;
 
 /**
  * Evidence file frontmatter.
  */
 export const EvidenceFrontmatterSchema = z.object({
-  evidence_level: EvidenceLevelSchema,
-  recommendation: RecommendationSchema,
-  comparison_ref: ComparisonRefSchema.nullable().optional(), // Can be null/optional
-  metrics: MetricsSchema,
-  compute: ComputeSchema.optional(),
-  commands: EvidenceCommandsSchema,
-  artifacts: EvidenceArtifactsSchema,
+  entity_type: z.literal('evidence'),
+  experiment_id: z.string().describe('Parent experiment ID'),
+  stage: EvidenceStageSchema.describe('Evidence stage (smoke|validation|final)'),
+  runs: z.array(EvidenceRunSchema).describe('Individual run results'),
+  aggregate: EvidenceAggregateSchema.optional().describe('Aggregated statistics'),
+  summary: z.string().optional().describe('Human-readable summary'),
+  recommendation: EvidenceRecommendationSchema.default('none').describe('Suggested next action'),
+  created: z.string().describe('ISO timestamp'),
 });
 export type EvidenceFrontmatter = z.infer<typeof EvidenceFrontmatterSchema>;
 
-/**
- * Experiment entity metadata (.experiment.yaml).
- */
-export const ExperimentMetadataSchema = z.object({
-  entity_type: z.literal('experiment'),
-  schema: z.literal('ml-experiment'),
-  comparison_ref: ComparisonRefSchema.nullable().optional(), // Can be filled in later
-  created: z.string(),
-});
-export type ExperimentMetadata = z.infer<typeof ExperimentMetadataSchema>;
+// ============================================================================
+// Resolution Entity
+// ============================================================================
 
 /**
- * Baseline entity metadata (.baseline.yaml).
+ * Resolution document frontmatter.
  */
-export const BaselineMetadataSchema = z.object({
-  entity_type: z.literal('baseline'),
-  created: z.string(),
-  superseded_by: z.string().nullable().optional(), // null means not superseded
+export const ResolutionFrontmatterSchema = z.object({
+  entity_type: z.literal('resolution'),
+  experiment_id: z.string().describe('Parent experiment ID'),
+  resolution: ResolutionTypeSchema.describe('Resolution type'),
+  accepted_recipe: z.string().optional().describe('Created recipe ID (if accept)'),
+  accepted_tags: z.array(RecipeTagSchema).optional().describe('Tags for accepted recipe'),
+  rejection_reason: z.string().optional().describe('Reason for rejection'),
+  uncertainty_reason: z.string().optional().describe('Reason for inconclusive'),
+  blocker: z.string().optional().describe('Blocker for hold'),
+  revisit_condition: z.string().optional().describe('Condition for retry'),
+  retry_plan: z.string().optional().describe('Plan for retry'),
+  rationale: z.string().optional().describe('Explanation of decision'),
+  supporting_evidence: z.array(z.object({
+    stage: EvidenceStageSchema,
+    summary: z.string(),
+  })).optional().describe('References to supporting evidence'),
+  created: z.string().describe('ISO timestamp'),
 });
-export type BaselineMetadata = z.infer<typeof BaselineMetadataSchema>;
+export type ResolutionFrontmatter = z.infer<typeof ResolutionFrontmatterSchema>;
+
+// ============================================================================
+// Finding Entity (V2 - unchanged pattern)
+// ============================================================================
 
 /**
- * Candidate version record.
+ * Finding entity metadata (finding.yaml).
  */
-export const CandidateVersionSchema = z.object({
-  version: z.number(),
-  file: z.string(),
-  status: z.enum(['draft', 'finalized']),
-  supporting_experiments: z.array(z.string()).optional(),
-  created: z.string(),
+export const FindingMetadataSchema = z.object({
+  entity_type: z.literal('finding'),
+  created: z.string().describe('ISO timestamp'),
 });
-export type CandidateVersion = z.infer<typeof CandidateVersionSchema>;
+export type FindingMetadata = z.infer<typeof FindingMetadataSchema>;
 
-/**
- * Candidate entity metadata (.candidate.yaml).
- */
-export const CandidateMetadataSchema = z.object({
-  entity_type: z.literal('candidate'),
-  name: z.string().min(1),
-  current_version: z.number(),
-  latest_finalized_version: z.number().nullable().optional(), // null means no finalized version
-  versions: z.array(CandidateVersionSchema),
-});
-export type CandidateMetadata = z.infer<typeof CandidateMetadataSchema>;
-
-/**
- * Decision file frontmatter.
- */
-export const DecisionFrontmatterSchema = z.object({
-  decision: DecisionSchema,
-  target_candidate: z.string().optional(),
-  rejection_reason: z.string().optional(),
-  uncertainty_reason: z.string().optional(),
-  blocker: z.string().optional(),
-  revisit_condition: z.string().optional(),
-  retry_plan: z.string().optional(),
-});
-export type DecisionFrontmatter = z.infer<typeof DecisionFrontmatterSchema>;
+// ============================================================================
+// Workspace Entity (V2)
+// ============================================================================
 
 /**
  * Evaluation (workspace) metadata (.workspace.yaml).
  */
 export const WorkspaceMetadataSchema = z.object({
   entity_type: z.literal('evaluation'),
-  schema: z.literal('ml-experiment'),
-  workspace_version: z.number(),
+  schema: z.literal('ml-experiment-v2'),
+  workspace_version: z.number().default(2),
 });
 export type WorkspaceMetadata = z.infer<typeof WorkspaceMetadataSchema>;
+
+// ============================================================================
+// Entity Type Utilities
+// ============================================================================
 
 /**
  * Entity type literal union for type guards.
  */
-export type EntityType = 'experiment' | 'baseline' | 'candidate';
+export type EntityTypeV2 = 'recipe' | 'experiment' | 'finding';
 
 /**
- * Get the metadata schema for an entity type.
+ * Get the metadata schema for a V2 entity type.
  */
-export function getMetadataSchema(entityType: EntityType) {
+export function getMetadataSchemaV2(entityType: EntityTypeV2) {
   switch (entityType) {
+    case 'recipe':
+      return RecipeMetadataSchema;
     case 'experiment':
       return ExperimentMetadataSchema;
-    case 'baseline':
-      return BaselineMetadataSchema;
-    case 'candidate':
-      return CandidateMetadataSchema;
+    case 'finding':
+      return FindingMetadataSchema;
   }
 }
 
 /**
- * Get the metadata file name for an entity type.
+ * Get the metadata file name for a V2 entity type.
  */
-export function getMetadataFileName(entityType: EntityType): string {
+export function getMetadataFileNameV2(entityType: EntityTypeV2): string {
   switch (entityType) {
+    case 'recipe':
+      return 'recipe.yaml';
     case 'experiment':
-      return '.experiment.yaml';
-    case 'baseline':
-      return '.baseline.yaml';
-    case 'candidate':
-      return '.candidate.yaml';
+      return 'experiment.yaml';
+    case 'finding':
+      return 'finding.yaml';
   }
 }
 
 /**
- * Get the subdirectory for an entity type within mlspec/.
+ * Get the subdirectory for a V2 entity type within mlspec/.
  */
-export function getEntityDir(entityType: EntityType): string {
+export function getEntityDirV2(entityType: EntityTypeV2): string {
   switch (entityType) {
+    case 'recipe':
+      return 'recipes';
     case 'experiment':
       return 'experiments';
-    case 'baseline':
-      return 'baselines';
-    case 'candidate':
-      return 'candidates';
+    case 'finding':
+      return 'findings';
   }
 }

@@ -1,211 +1,212 @@
 /**
  * MLSpec Explore Skill Template
  *
- * Template module for MLSpec explore skill and command.
+ * Skill for thinking, inspecting, diagnosing, and proposing possible experiments.
  */
 import type { SkillTemplate, CommandTemplate } from '../types.js';
 
 export function getMlspecExploreSkillTemplate(): SkillTemplate {
   return {
     name: 'mlspec-explore',
-    description: 'Explore ML experiment ideas and analyze problems. Use when the user wants to think through an ML problem, investigate failures, or brainstorm experiment approaches before committing to a direction.',
-    instructions: `Explore ML experiment ideas and analyze problems.
+    description: 'Explore ML experiment ideas, inspect recipes/experiments/evidence, reason about failure modes, and propose possible experiments. Use when you want to understand the current state of the ML workspace and identify promising directions.',
+    instructions: `Explore ML experiment ideas and analyze the workspace.
 
-This skill enters thinking mode for ML experimentation. Read the MLSpec workspace, inspect code and data, analyze failure modes, and propose experiment directions. **Do not run training or modify code.**
-
----
-
-**Input**: The user's request should describe what they want to explore. Examples:
-
-\`\`\`
-I want to try ROI cropping
-Maybe CutMix helps
-The model is failing on small objects
-How do I improve this competition score?
-\`\`\`
+This skill inspects the mlspec/ workspace to understand current recipes, experiments, evidence, and findings. It reasons about failure modes and proposes possible experiments.
 
 ---
 
-**Steps**
-
-1. **Understand the user's question**
-   - Listen for what's bothering them about their ML system
-   - Identify if they have a hypothesis, a problem, or an open question
-   - If vague, ask clarifying questions to narrow focus
-
-2. **Read MLSpec workspace context**
-   - Check \`mlspec/evaluation.md\` for project overview
-   - List baselines: \`mlspec status\` (baselines section)
-   - List candidates: \`mlspec status\` (candidates section)
-   - Read current findings if present
-   - Check for active experiments and their status
-
-3. **Inspect relevant code and artifacts**
-   - Model architecture files
-   - Training configuration
-   - Data preprocessing
-   - Evaluation metrics
-   - Existing experiment outputs if available
-
-4. **Analyze the problem space**
-   - Identify possible failure modes
-   - Consider signal vs noise in metrics
-   - Think about validation risks (data leakage, proxy metrics, etc.)
-   - Consider controlled variables that matter for the domain
-   - Identify what experiments could test the hypothesis
-
-5. **Share findings and recommendations**
-   - Present analysis in clear language
-   - Use ASCII diagrams to illustrate concepts if helpful
-   - Suggest experiment approaches with rationale
-   - Explain tradeoffs between approaches
-   - Identify controlled variables to maintain
-
-6. **Offer next steps**
-   - Suggest creating an MLSpec experiment if direction is clear
-   - Offer to explore a specific aspect in more depth
-   - Ask what resonates or what to investigate further
+**Input**: Optional focus area or question from conversation.
 
 ---
 
-**Output**
+**What to Inspect**
+
+1. **Recipes** (mlspec/recipes/*/recipe.yaml)
+   - Current-best recipe and its performance
+   - Other recipes and their tags (baseline, candidate, variant)
+   - Parent lineage to understand experiment history
+
+2. **Active Experiments** (mlspec/experiments/*/experiment.yaml)
+   - Status: draft, running, resolved
+   - base_recipe and proposed_recipe
+   - proposed_change description
+   - Existing evidence stages
+
+3. **Evidence** (mlspec/experiments/*/evidence/*.md)
+   - smoke/validation/final evidence files
+   - Runs, metrics, and recommendations
+   - Compare to base recipe metrics
+
+4. **Findings** (mlspec/findings/*.md)
+   - What works and what doesn't
+   - Documented lessons from past experiments
+
+5. **Code and Data** (optional)
+   - Inspect model code, preprocessing, training scripts
+   - Understand data characteristics
+
+---
+
+**Analysis Steps**
+
+1. **Understand Current Best**
+   - Identify the current-best recipe
+   - Note its metrics and configuration
+
+2. **Review Active Experiments**
+   - What's running? What's waiting for evidence?
+   - Are any experiments stuck or showing negative results?
+
+3. **Identify Opportunities**
+   - What changes could improve current-best?
+   - Are there failed experiments that teach us something?
+   - What do findings suggest as promising directions?
+
+4. **Consider Constraints**
+   - Computational budget
+   - Data availability
+   - Timeline pressures
+
+---
+
+**Output Format**
 
 \`\`\`
-## Exploration: <topic>
+## Exploration Results
 
-### Problem Understanding
-<What the problem is and why it matters>
+### Current Best Recipe
+- **ID**: rf-mfcc-v1
+- **Metrics**: accuracy=0.934, f1=0.921
+- **Key characteristics**: RandomForest, MFCC features, 200 trees
 
-### Current Context
-<Relevant baselines, candidates, findings, or prior experiments>
+### Active Experiments
+1. add-roi-cropping (running) - smoke complete, validation in progress
+2. tune-n-estimators (draft) - waiting to start
 
-### Analysis
-<Failure modes, signal/noise considerations, validation risks>
+### Opportunities Identified
+1. **ROI cropping**: Smoke shows +1.2% accuracy - promising
+2. **Feature selection**: Could reduce overfitting
+3. **Ensemble**: Combine top 2 recipes
 
-### Possible Experiments
-1. **<experiment name>**: <brief description>
-   - Controlled variables: <what stays the same>
-   - Success criteria: <what would validate the approach>
-   - Risks: <what could go wrong>
+### Recommended Next Experiment
+- **Base**: rf-mfcc-v1 (current-best)
+- **Change**: Add ROI cropping before classification
+- **Hypothesis**: ROI cropping will improve accuracy by >1%
 
-2. ...
-
-### Recommendations
-<If a direction seems promising, explain why>
+Next: /mlspec-propose add-roi-cropping --from rf-mfcc-v1 --proposes rf-mfcc-roi-v1
 \`\`\`
 
-**Guardrails**
-- **DO NOT** run training or execute commands
-- **DO NOT** modify training code, config files, or data
-- **DO NOT** create experiments unless explicitly asked
-- **DO** read evaluation.md, baselines, candidates, findings, and active experiments
-- **DO** inspect code and artifacts for context
-- **DO** think through failure modes and validation risks
-- **DO** suggest experiments only if the user asks or the direction is clear`,
+---
+
+**Boundaries**
+
+**Allowed:**
+- Inspect recipes, experiments, evidence, findings
+- Inspect data, code, artifacts
+- Reason about failure modes
+- Suggest possible experiments
+
+**Forbidden:**
+- Create experiment files
+- Run training
+- Resolve experiments
+
+---
+
+**Inference from Workspace**
+
+When context is unclear, infer from:
+- Current-best recipe tags
+- Active experiments with incomplete evidence
+- Most recent experiment or exploration output
+- User's stated goals or concerns
+
+When genuinely ambiguous, ask one focused question.
+`,
     license: 'MIT',
-    compatibility: 'Requires openspec CLI and MLSpec workspace',
-    metadata: { author: 'openspec', version: '1.0' },
+    compatibility: 'Requires MLSpec v2 workspace',
+    metadata: { author: 'openspec', version: '2.0' },
   };
 }
 
 export function getMlspecExploreCommandTemplate(): CommandTemplate {
   return {
     name: 'MLSpec: Explore',
-    description: 'Explore ML experiment ideas and analyze problems. Use when the user wants to think through an ML problem, investigate failures, or brainstorm experiment approaches before committing to a direction.',
+    description: 'Explore ML experiment ideas, inspect workspace, reason about failure modes, and propose possible experiments.',
     category: 'Workflow',
-    tags: ['workflow', 'mlspec', 'ml', 'explore', 'experimental'],
-    content: `Explore ML experiment ideas and analyze problems.
+    tags: ['workflow', 'mlspec', 'ml', 'experiment', 'explore'],
+    content: `Explore ML experiment ideas and analyze the workspace.
 
-This skill enters thinking mode for ML experimentation. Read the MLSpec workspace, inspect code and data, analyze failure modes, and propose experiment directions. **Do not run training or modify code.**
-
----
-
-**Input**: The user's request should describe what they want to explore. Examples:
-
-\`\`\`
-I want to try ROI cropping
-Maybe CutMix helps
-The model is failing on small objects
-How do I improve this competition score?
-\`\`\`
+This skill inspects the mlspec/ workspace to understand current recipes, experiments, evidence, and findings. It reasons about failure modes and proposes possible experiments.
 
 ---
 
-**Steps**
-
-1. **Understand the user's question**
-   - Listen for what's bothering them about their ML system
-   - Identify if they have a hypothesis, a problem, or an open question
-   - If vague, ask clarifying questions to narrow focus
-
-2. **Read MLSpec workspace context**
-   - Check \`mlspec/evaluation.md\` for project overview
-   - List baselines: \`mlspec status\` (baselines section)
-   - List candidates: \`mlspec status\` (candidates section)
-   - Read current findings if present
-   - Check for active experiments and their status
-
-3. **Inspect relevant code and artifacts**
-   - Model architecture files
-   - Training configuration
-   - Data preprocessing
-   - Evaluation metrics
-   - Existing experiment outputs if available
-
-4. **Analyze the problem space**
-   - Identify possible failure modes
-   - Consider signal vs noise in metrics
-   - Think about validation risks (data leakage, proxy metrics, etc.)
-   - Consider controlled variables that matter for the domain
-   - Identify what experiments could test the hypothesis
-
-5. **Share findings and recommendations**
-   - Present analysis in clear language
-   - Use ASCII diagrams to illustrate concepts if helpful
-   - Suggest experiment approaches with rationale
-   - Explain tradeoffs between approaches
-   - Identify controlled variables to maintain
-
-6. **Offer next steps**
-   - Suggest creating an MLSpec experiment if direction is clear
-   - Offer to explore a specific aspect in more depth
-   - Ask what resonates or what to investigate further
+**Input**: Optional focus area or question from conversation.
 
 ---
 
-**Output**
+**What to Inspect**
+
+1. **Recipes** (mlspec/recipes/*/recipe.yaml)
+   - Current-best recipe and its performance
+   - Other recipes and their tags (baseline, candidate, variant)
+   - Parent lineage to understand experiment history
+
+2. **Active Experiments** (mlspec/experiments/*/experiment.yaml)
+   - Status: draft, running, resolved
+   - base_recipe and proposed_recipe
+   - proposed_change description
+   - Existing evidence stages
+
+3. **Evidence** (mlspec/experiments/*/evidence/*.md)
+   - smoke/validation/final evidence files
+   - Runs, metrics, and recommendations
+   - Compare to base recipe metrics
+
+4. **Findings** (mlspec/findings/*.md)
+   - What works and what doesn't
+   - Documented lessons from past experiments
+
+---
+
+**Output Format**
 
 \`\`\`
-## Exploration: <topic>
+## Exploration Results
 
-### Problem Understanding
-<What the problem is and why it matters>
+### Current Best Recipe
+- **ID**: rf-mfcc-v1
+- **Metrics**: accuracy=0.934, f1=0.921
 
-### Current Context
-<Relevant baselines, candidates, findings, or prior experiments>
+### Active Experiments
+1. add-roi-cropping (running) - smoke complete
 
-### Analysis
-<Failure modes, signal/noise considerations, validation risks>
+### Opportunities Identified
+1. ROI cropping: Smoke shows +1.2% accuracy
 
-### Possible Experiments
-1. **<experiment name>**: <brief description>
-   - Controlled variables: <what stays the same>
-   - Success criteria: <what would validate the approach>
-   - Risks: <what could go wrong>
+### Recommended Next Experiment
+- **Base**: rf-mfcc-v1
+- **Change**: Add ROI cropping
 
-2. ...
-
-### Recommendations
-<If a direction seems promising, explain why>
+Next: /mlspec-propose add-roi-cropping
 \`\`\`
 
-**Guardrails**
-- **DO NOT** run training or execute commands
-- **DO NOT** modify training code, config files, or data
-- **DO NOT** create experiments unless explicitly asked
-- **DO** read evaluation.md, baselines, candidates, findings, and active experiments
-- **DO** inspect code and artifacts for context
-- **DO** think through failure modes and validation risks
-- **DO** suggest experiments only if the user asks or the direction is clear`,
+---
+
+**Boundaries**
+
+**Allowed:** Inspect, reason, propose
+**Forbidden:** Create files, run training, resolve
+
+---
+
+**Inference from Workspace**
+
+When context is unclear, infer from:
+- Current-best recipe tags
+- Active experiments with incomplete evidence
+- User's stated goals
+
+When genuinely ambiguous, ask one focused question.`,
   };
 }

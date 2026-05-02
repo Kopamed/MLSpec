@@ -1,0 +1,47 @@
+# Recipe: {{id}}
+
+## Overview
+
+- **ID**: {{id}}
+- **Name**: {{name}}
+- **Created**: {{created}}
+
+{% if parent_recipe %}
+- **Parent**: {{parent_recipe}}
+{% endif %}
+
+{% if created_by_experiment %}
+- **Created by**: {{created_by_experiment}}
+{% endif %}
+
+## Tags
+
+{% if tags %}
+{% for tag in tags %}
+- [ ] {{tag}}
+{% endfor %}
+{% else %}
+_No tags assigned._
+{% endif %}
+
+## Configuration
+
+```yaml
+{{ config | dump if config else "# Configuration not yet defined" }}
+```
+
+## Metrics
+
+{% if metrics %}
+| Metric | Value |
+|--------|-------|
+{% for metric, value in metrics.items() %}
+| {{metric}} | {{value}} |
+{% endfor %}
+{% else %}
+_No metrics recorded yet._
+{% endif %}
+
+## Summary
+
+_Describe this recipe's purpose, key characteristics, and how it differs from its parent._

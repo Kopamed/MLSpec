@@ -1,117 +1,101 @@
 /**
- * MLSpec Reference Resolver
+ * MLSpec Reference Resolver (V2)
  *
- * Validates cross-entity references within the MLSpec workspace.
+ * Validates cross-entity references within the MLSpec V2 workspace.
+ * V2 uses recipes/ instead of baselines/candidates/ and resolution.md instead of decision.md.
  */
 
 import path from 'node:path';
 import * as fs from 'node:fs';
-import {
-  resolveMlspecPath,
-  ARCHIVE_SUBDIRS,
-  type ArchiveDecision,
-} from './utils.js';
+import { resolveMlspecPath } from './utils.js';
 import type {
-  BaselineMetadata,
-  CandidateMetadata,
   ExperimentMetadata,
-  ComparisonRef,
+  RecipeMetadata,
 } from './entity-types.js';
 import { parse as parseYaml } from 'yaml';
 
-export interface ReferenceValidationResult {
-  valid: boolean;
-  error?: string;
+/**
+ * Check if a recipe exists.
+ */
+export function recipeExists(projectPath: string, recipeId: string): boolean {
+  const recipePath = resolveMlspecPath(projectPath, 'recipes', recipeId, 'recipe.yaml');
+  return fs.existsSync(recipePath);
 }
 
 /**
- * Check if a baseline exists.
+ * Load recipe metadata.
  */
-export function baselineExists(projectPath: string, baselineName: string): boolean {
-  const baselinePath = resolveMlspecPath(projectPath, 'baselines', baselineName, '.baseline.yaml');
-  return fs.existsSync(baselinePath);
+export function loadRecipeMetadata(projectPath: string, recipeId: string): RecipeMetadata | null {
+  const recipePath = resolveMlspecPath(projectPath, 'recipes', recipeId, 'recipe.yaml');
+  if (!fs.existsSync(recipePath)) {
+    return null;
+  }
+  try {
+    const content = fs.readFileSync(recipePath, 'utf-8');
+    return parseYaml(content) as RecipeMetadata;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Check if a candidate exists.
+ * List all recipes.
  */
-export function candidateExists(projectPath: string, candidateName: string): boolean {
-  const candidatePath = resolveMlspecPath(projectPath, 'candidates', candidateName, '.candidate.yaml');
-  return fs.existsSync(candidatePath);
+export function listRecipes(projectPath: string): string[] {
+  const recipesDir = resolveMlspecPath(projectPath, 'recipes');
+  if (!fs.existsSync(recipesDir)) {
+    return [];
+  }
+  return fs.readdirSync(recipesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+}
+
+/**
+ * List all unique tags across all recipes.
+ */
+export function listRecipeTags(projectPath: string): string[] {
+  const recipes = listRecipes(projectPath);
+  const tags = new Set<string>();
+  for (const recipeId of recipes) {
+    const meta = loadRecipeMetadata(projectPath, recipeId);
+    if (meta?.tags) {
+      for (const tag of meta.tags) {
+        tags.add(tag);
+      }
+    }
+  }
+  return Array.from(tags);
+}
+
+/**
+ * Load all recipes into a Map for efficient access.
+ */
+export function loadAllRecipes(projectPath: string): Map<string, RecipeMetadata> {
+  const recipes = listRecipes(projectPath);
+  const result = new Map<string, RecipeMetadata>();
+  for (const recipeId of recipes) {
+    const meta = loadRecipeMetadata(projectPath, recipeId);
+    if (meta) {
+      result.set(recipeId, meta);
+    }
+  }
+  return result;
 }
 
 /**
  * Check if an experiment exists.
  */
 export function experimentExists(projectPath: string, experimentName: string): boolean {
-  const experimentPath = resolveMlspecPath(projectPath, 'experiments', experimentName, '.experiment.yaml');
+  const experimentPath = resolveMlspecPath(projectPath, 'experiments', experimentName, 'experiment.yaml');
   return fs.existsSync(experimentPath);
-}
-
-/**
- * Validate a comparison reference (baseline or candidate).
- * Returns valid if ref is null/undefined (caller decides whether to warn or error).
- */
-export function validateComparisonRef(projectPath: string, ref: ComparisonRef | null | undefined): ReferenceValidationResult {
-  if (!ref) {
-    // Null/undefined is considered valid - caller should warn if comparison_ref is expected
-    return { valid: true };
-  }
-  if (ref.entity_type === 'baseline') {
-    if (!baselineExists(projectPath, ref.name)) {
-      return {
-        valid: false,
-        error: `Baseline '${ref.name}' does not exist`,
-      };
-    }
-  } else if (ref.entity_type === 'candidate') {
-    if (!candidateExists(projectPath, ref.name)) {
-      return {
-        valid: false,
-        error: `Candidate '${ref.name}' does not exist`,
-      };
-    }
-  }
-  return { valid: true };
-}
-
-/**
- * Load baseline metadata.
- */
-export function loadBaselineMetadata(projectPath: string, baselineName: string): BaselineMetadata | null {
-  const baselinePath = resolveMlspecPath(projectPath, 'baselines', baselineName, '.baseline.yaml');
-  if (!fs.existsSync(baselinePath)) {
-    return null;
-  }
-  try {
-    const content = fs.readFileSync(baselinePath, 'utf-8');
-    return parseYaml(content) as BaselineMetadata;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Load candidate metadata.
- */
-export function loadCandidateMetadata(projectPath: string, candidateName: string): CandidateMetadata | null {
-  const candidatePath = resolveMlspecPath(projectPath, 'candidates', candidateName, '.candidate.yaml');
-  if (!fs.existsSync(candidatePath)) {
-    return null;
-  }
-  try {
-    const content = fs.readFileSync(candidatePath, 'utf-8');
-    return parseYaml(content) as CandidateMetadata;
-  } catch {
-    return null;
-  }
 }
 
 /**
  * Load experiment metadata.
  */
 export function loadExperimentMetadata(projectPath: string, experimentName: string): ExperimentMetadata | null {
-  const experimentPath = resolveMlspecPath(projectPath, 'experiments', experimentName, '.experiment.yaml');
+  const experimentPath = resolveMlspecPath(projectPath, 'experiments', experimentName, 'experiment.yaml');
   if (!fs.existsSync(experimentPath)) {
     return null;
   }
@@ -121,32 +105,6 @@ export function loadExperimentMetadata(projectPath: string, experimentName: stri
   } catch {
     return null;
   }
-}
-
-/**
- * List all baselines.
- */
-export function listBaselines(projectPath: string): string[] {
-  const baselinesDir = resolveMlspecPath(projectPath, 'baselines');
-  if (!fs.existsSync(baselinesDir)) {
-    return [];
-  }
-  return fs.readdirSync(baselinesDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
-}
-
-/**
- * List all candidates.
- */
-export function listCandidates(projectPath: string): string[] {
-  const candidatesDir = resolveMlspecPath(projectPath, 'candidates');
-  if (!fs.existsSync(candidatesDir)) {
-    return [];
-  }
-  return fs.readdirSync(candidatesDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
 }
 
 /**
@@ -163,95 +121,78 @@ export function listExperiments(projectPath: string): string[] {
 }
 
 /**
- * Get archive subdirectory for a decision.
+ * V2 Protocol state for an experiment.
  */
-export function getArchiveSubdir(decision: ArchiveDecision): string {
-  return ARCHIVE_SUBDIRS[decision];
-}
+export type ProtocolStateV2 = 'needs evidence' | 'running' | 'needs resolution' | 'resolved';
 
 /**
- * List archived experiments.
- */
-export function listArchivedExperiments(projectPath: string): Record<ArchiveDecision, string[]> {
-  const archiveDir = resolveMlspecPath(projectPath, 'archive');
-  const result: Record<ArchiveDecision, string[]> = {
-    promote: [],
-    reject: [],
-    inconclusive: [],
-    hold: [],
-    retry: [],
-  };
-
-  if (!fs.existsSync(archiveDir)) {
-    return result;
-  }
-
-  for (const [decisionKey, subdir] of Object.entries(ARCHIVE_SUBDIRS)) {
-    const decision = decisionKey as ArchiveDecision;
-    const subdirPath = path.join(archiveDir, subdir);
-    if (fs.existsSync(subdirPath)) {
-      result[decision] = fs.readdirSync(subdirPath, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name);
-    }
-  }
-
-  return result;
-}
-
-/**
- * Protocol state for an experiment.
- */
-export type ProtocolState = 'needs hypothesis' | 'needs evidence' | 'needs decision' | 'needs promotion' | 'needs archive';
-
-/**
- * Get the protocol state for an experiment.
+ * Get the protocol state for an experiment (V2).
  *
  * Determines what step in the experiment protocol an experiment is at
  * based on the files that exist and their content.
  */
-export function getProtocolState(projectPath: string, experiment: string): ProtocolState {
+export function getProtocolStateV2(projectPath: string, experiment: string): ProtocolStateV2 {
   const experimentDir = resolveMlspecPath(projectPath, 'experiments', experiment);
-  const hypothesisPath = path.join(experimentDir, 'hypothesis.md');
+  const experimentPath = path.join(experimentDir, 'experiment.yaml');
   const evidenceDir = path.join(experimentDir, 'evidence');
-  const decisionPath = path.join(experimentDir, 'decision.md');
+  const resolutionPath = path.join(experimentDir, 'resolution.md');
 
-  // Check existence in order
-  if (!fs.existsSync(hypothesisPath)) {
-    return 'needs hypothesis';
-  }
-
-  const hasEvidence = fs.existsSync(evidenceDir) &&
-    fs.readdirSync(evidenceDir).filter((f: string) => f.endsWith('.md')).length > 0;
-
-  if (!hasEvidence) {
+  // Load experiment to check status
+  if (!fs.existsSync(experimentPath)) {
     return 'needs evidence';
   }
 
-  if (!fs.existsSync(decisionPath)) {
-    return 'needs decision';
-  }
-
-  // Load decision to check if promote
   try {
-    const content = fs.readFileSync(decisionPath, 'utf-8');
-    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    if (frontmatterMatch) {
-      const parsed = parseYaml(frontmatterMatch[1]);
-      if (parsed.decision === 'promote' && parsed.target_candidate) {
-        // Check if this experiment is listed in any candidate version's supporting_experiments
-        const candidateMeta = loadCandidateMetadata(projectPath, parsed.target_candidate);
-        const hasBeenPromoted = candidateMeta?.versions.some((v: { supporting_experiments?: string[] }) =>
-          v.supporting_experiments?.includes(experiment)
-        );
-        if (!hasBeenPromoted) {
-          return 'needs promotion';
-        }
-      }
+    const content = fs.readFileSync(experimentPath, 'utf-8');
+    const meta = parseYaml(content) as ExperimentMetadata;
+    if (meta.status === 'resolved') {
+      return 'resolved';
     }
+    if (meta.status === 'running') {
+      // Check if has evidence
+      const hasEvidence = fs.existsSync(evidenceDir) &&
+        fs.readdirSync(evidenceDir).filter((f: string) => f.endsWith('.md')).length > 0;
+      return hasEvidence ? 'needs resolution' : 'running';
+    }
+    return 'needs evidence';
   } catch {
-    // If we can't parse decision, assume needs archive
+    return 'needs evidence';
+  }
+}
+
+/**
+ * Detect cycles in recipe parent chain.
+ * Returns true if a cycle is detected.
+ */
+export function detectCycleInParentChain(projectPath: string, recipeId: string, visited: Set<string> = new Set()): boolean {
+  if (visited.has(recipeId)) {
+    return true; // Cycle detected
+  }
+  visited.add(recipeId);
+
+  const meta = loadRecipeMetadata(projectPath, recipeId);
+  if (!meta?.parent_recipe) {
+    return false; // No parent, no cycle
   }
 
-  return 'needs archive';
+  return detectCycleInParentChain(projectPath, meta.parent_recipe, visited);
+}
+
+/**
+ * Get the ancestry chain of a recipe.
+ */
+export function getRecipeAncestry(projectPath: string, recipeId: string): string[] {
+  const ancestry: string[] = [recipeId];
+  let currentId: string | null = recipeId;
+
+  while (currentId) {
+    const meta = loadRecipeMetadata(projectPath, currentId);
+    if (!meta?.parent_recipe) {
+      break;
+    }
+    ancestry.push(meta.parent_recipe);
+    currentId = meta.parent_recipe;
+  }
+
+  return ancestry.reverse();
 }

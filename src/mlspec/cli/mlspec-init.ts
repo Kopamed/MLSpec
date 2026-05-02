@@ -119,8 +119,8 @@ export class MlspecInitCommand {
       // Create or refresh workspace.yaml
       const workspaceMeta = {
         entity_type: 'evaluation',
-        schema: 'ml-experiment',
-        workspace_version: 1,
+        schema: 'ml-experiment-v2',
+        workspace_version: 2,
       };
       const workspaceFilePath = resolveMlspecPath(projectPath, '.workspace.yaml');
       await FileSystemUtils.writeFile(
@@ -129,28 +129,26 @@ export class MlspecInitCommand {
       );
 
       // Create or refresh evaluation.md
-      const evaluationContent = `# MLSpec Evaluation
+      const evaluationContent = `# MLSpec V2 Evaluation
 
 ## Overview
 
 _Describe the purpose and scope of this ML experimentation workspace._
 
-## Baselines
+## Current Best Recipe
 
-| Name | Created | Status | Notes |
-|------|---------|--------|-------|
-| | | | |
+_No current-best recipe defined yet._
+
+## Recipes
+
+| ID | Name | Tags | Parent | Created |
+|----|------|------|--------|---------|
+| | | | | |
 
 ## Active Experiments
 
-| Name | Hypothesis | Status | Evidence |
-|------|------------|--------|----------|
-| | | | |
-
-## Candidates
-
-| Name | Current Version | Status | Notes |
-|------|-----------------|--------|-------|
+| ID | Base → Proposed | Status | Evidence |
+|----|-----------------|--------|----------|
 | | | | |
 
 ## Key Findings
@@ -168,8 +166,8 @@ _Next steps and priorities for the ML experimentation effort._
       const agentsPath = resolveMlspecPath(projectPath, 'AGENTS.md');
       await FileSystemUtils.writeFile(agentsPath, AGENTS_CONTENT);
 
-      // Create required subdirectories
-      const subdirs = ['baselines', 'experiments', 'candidates', 'findings', 'archive'];
+      // Create required subdirectories (V2 uses recipes/ instead of baselines/candidates/)
+      const subdirs = ['recipes', 'experiments', 'findings'];
       for (const subdir of subdirs) {
         const subdirPath = resolveMlspecPath(projectPath, subdir);
         await FileSystemUtils.createDirectory(subdirPath);

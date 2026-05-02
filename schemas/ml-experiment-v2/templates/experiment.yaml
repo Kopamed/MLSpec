@@ -1,0 +1,56 @@
+# Experiment: {{id}}
+
+## Overview
+
+- **ID**: {{id}}
+- **Status**: {{status | default("draft") }}
+- **Created**: {{created}}
+
+## Recipe Change
+
+- **Base Recipe**: {{base_recipe}}
+- **Proposed Recipe**: {{proposed_recipe}}
+
+## Proposed Change
+
+{{proposed_change}}
+
+## Controlled Variables
+
+{% if controlled_variables %}
+{% for variable in controlled_variables %}
+- {{variable}}
+{% endfor %}
+{% else %}
+_Controlled variables not yet defined._
+{% endif %}
+
+## Success Criteria
+
+{% if success_criteria %}
+{% for criterion in success_criteria %}
+- {{criterion}}
+{% endfor %}
+{% else %}
+_Success criteria not yet defined._
+{% endif %}
+
+## Abort Criteria
+
+{% if abort_criteria %}
+{% for criterion in abort_criteria %}
+- {{criterion}}
+{% endfor %}
+{% else %}
+_Abort criteria not yet defined._
+{% endif %}
+
+## Evidence Plan
+
+{% if evidence_plan %}
+- smoke: Cheap signal check
+- validation: Trusted local evaluation
+- final: External/production result
+{% else %}
+_Evidence plan not yet defined._
+{% endif %}

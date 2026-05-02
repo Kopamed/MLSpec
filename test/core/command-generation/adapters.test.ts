@@ -549,7 +549,8 @@ describe('command-generation/adapters', () => {
     });
 
     it('should use mlspec-*.md naming for MLSpec command IDs', () => {
-      const mlspecIds = ['mlspec-explore', 'mlspec-propose-experiment', 'mlspec-run-evidence', 'mlspec-decide', 'mlspec-promote', 'mlspec-archive'];
+      // V2 MLSpec commands (V1 commands removed: mlspec-propose-experiment, mlspec-run-evidence, mlspec-decide, mlspec-promote, mlspec-archive)
+      const mlspecIds = ['mlspec-explore', 'mlspec-propose', 'mlspec-run', 'mlspec-resolve', 'mlspec-next'];
       for (const id of mlspecIds) {
         const filePath = opencodeAdapter.getFilePath(id);
         expect(filePath).toBe(path.join('.opencode', 'commands', `${id}.md`));

@@ -20,16 +20,16 @@ describe('profiles', () => {
   });
 
   describe('ALL_WORKFLOWS', () => {
-    it('should contain all 17 workflows', () => {
-      expect(ALL_WORKFLOWS).toHaveLength(17);
+    it('should contain all 16 workflows', () => {
+      expect(ALL_WORKFLOWS).toHaveLength(16);
     });
 
     it('should contain expected workflow IDs', () => {
       const expected = [
         'propose', 'explore', 'new', 'continue', 'apply',
         'ff', 'sync', 'archive', 'bulk-archive', 'verify', 'onboard',
-        'mlspec-explore', 'mlspec-propose-experiment', 'mlspec-run-evidence',
-        'mlspec-decide', 'mlspec-promote', 'mlspec-archive',
+        'mlspec-explore', 'mlspec-propose', 'mlspec-run',
+        'mlspec-resolve', 'mlspec-next',
       ];
       expect([...ALL_WORKFLOWS]).toEqual(expected);
     });

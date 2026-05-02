@@ -1,106 +1,131 @@
 /**
- * MLSpec Agent Experiment Protocol
+ * MLSpec V2 Agent Experiment Protocol
  *
- * This file contains the AGENTS.md content that is created by `openspec ml init`
- * and documents the agent experiment protocol for MLSpec.
+ * This file contains the AGENTS.md content that is created by `mlspec init`
+ * and documents the agent experiment protocol for MLSpec V2.
  */
 
-export const AGENTS_CONTENT = `# MLSpec Agent Experiment Protocol
+export const AGENTS_CONTENT = `# MLSpec V2 Agent Experiment Protocol
 
-This document describes the protocol for AI coding agents running ML experiments through MLSpec.
+This document describes the protocol for AI coding agents running ML experiments through MLSpec V2.
 
-## Before Running
+## Core Concepts
 
-1. **Read this protocol** before starting ML experiments in this workspace.
+### Recipe
+A recipe is a complete, runnable ML pipeline. Recipes form a graph via parent links:
+- **baseline**: Original recipe, never superseded OR historical reference
+- **candidate**: Has supporting experiments but not designated current-best
+- **current-best**: User-designated best performing recipe for the task
+- **variant**: Alternative approach (e.g., fast inference, small model)
+- **archived**: No longer actively considered
 
-2. **Create or review hypothesis.md** for the experiment:
-   - State the hypothesis clearly
-   - Define the comparison reference (baseline or candidate)
-   - List controlled variables (what stays fixed)
-   - Define success criteria (metric thresholds)
-   - Define abort criteria (when to stop early)
-   - Plan evidence level progression (E1 → E2 → E3 → E4 → E5)
+### Experiment
+An experiment proposes a change to a recipe. It has:
+- **base_recipe**: The recipe being modified
+- **proposed_recipe**: The new recipe ID if accepted
+- **proposed_change**: What is being changed
 
-3. **Record the planned command** and expected output location.
+### Evidence Stages
+Evidence is recorded at semantic stages, not arbitrary levels:
+- **smoke**: Cheap signal check — does it run? Is there positive/negative signal?
+- **validation**: Trusted local evaluation — does it beat the base recipe?
+- **final**: External/submission/production result
 
-## During Running
+## Workflow
 
-4. **Execute the planned command** — don't change anything except what's being tested.
+### 1. Explore
+Before creating experiments, understand the workspace:
+\`\`\`bash
+/mlspec-explore
+\`\`\`
+This inspects recipes, experiments, evidence, and findings to identify opportunities.
 
-5. **Log the actual command** that was executed (may differ from planned).
+### 2. Propose
+Create an experiment with full hypothesis:
+\`\`\`bash
+/mlspec-propose <experiment-id> --from <base-recipe> --proposes <proposed-recipe>
+\`\`\`
+Define:
+- Controlled variables (what stays fixed)
+- Success criteria (metric thresholds for acceptance)
+- Abort criteria (when to stop early)
+- Evidence plan (smoke → validation → final)
 
-6. **Save outputs** to the expected location or record where they were saved.
+### 3. Run
+Record evidence at each stage:
+\`\`\`bash
+/mlspec-run <experiment> <stage>
+\`\`\`
+- Stage is inferred if not specified
+- Records runs, metrics, and recommendations
 
-## After Running
+### 4. Resolve
+Resolve the experiment based on evidence:
+\`\`\`bash
+/mlspec-resolve <experiment>
+\`\`\`
+Resolution types:
+- **accept**: Creates new recipe node
+- **reject**: End experiment, no recipe
+- **retry**: Return to running with modifications
+- **hold**: Pause for later
+- **inconclusive**: Evidence neither supports nor refutes
 
-7. **Create evidence file** using \`mlspec add-evidence <experiment> --level E1\`:
-   - Record actual_command (the exact command run)
-   - Record changed_files (what you actually modified)
-   - Record metrics with actual numbers
-   - Interpret: is there a signal?
-   - Recommend: promote/reject/retry/inconclusive/hold
+### 5. Next
+Get recommended next action:
+\`\`\`bash
+/mlspec-next
+\`\`\`
+This is read-only and never modifies files.
 
-8. **Make a decision** using \`mlspec decide <experiment> --decision <decision>\`:
-   - Base on evidence, not intuition
-   - State reasoning explicitly
-   - If promote: specify target candidate
+## Acceptance Warning Matrix
 
-9. **Promote if warranted** using \`mlspec promote <experiment> --to <candidate>\`.
+When accepting an experiment, warnings are shown based on evidence stage vs target tag:
 
-10. **Archive completed experiments** using \`mlspec archive <experiment>\`.
-
-## Evidence Levels
-
-- **E1**: Cheap proxy (1 seed, minimal compute) — is there any signal?
-- **E2**: Controlled (3+ seeds, full data) — is the signal real?
-- **E3**: Realistic scale validation — does it transfer?
-- **E4**: Full cross-validation — is it robust?
-- **E5**: Final production validation — ready to ship?
+| Evidence Stage | → candidate | → current-best |
+|----------------|-------------|----------------|
+| smoke | Warning | Strong warning |
+| validation | OK | Normal |
+| final | OK | Strongest support |
 
 ## Controlled Variables
 
-Always document what stays fixed during an experiment:
-- Model / architecture
-- Dataset split or sampling strategy
+Always document what stays fixed:
+- Model architecture
+- Data split or sampling strategy
 - Preprocessing / input representation
 - Optimizer and learning-rate schedule
 - Batch size / accumulation
 - Seed(s)
 - Training budget / epochs / steps / tokens
 - Evaluation procedure
-- Domain-specific variables (e.g., image size for vision)
 
 ## Output Conventions
 
-Recommended path structure for local outputs:
-
+Recommended path structure:
 \`\`\`
 outputs/
 └── <experiment-name>/
-    └── <evidence-level>/
-        ├── command.txt      # Actual command executed
-        ├── metrics.json     # Numeric metrics
-        ├── train.log        # Training logs
-        ├── predictions.csv  # Predictions on test set
-        ├── checkpoint.pt    # Model checkpoint
-        └── diff.patch       # Changes made to codebase
+    └── <stage>/
+        ├── command.txt
+        ├── metrics.json
+        ├── train.log
+        ├── predictions.csv
+        ├── checkpoint.pt
+        └── diff.patch
 \`\`\`
-
-Agents using W&B, MLflow, or cloud training can reference those paths in the evidence \`artifacts\` field instead.
 
 ## Validation
 
-Run \`mlspec validate\` to check for issues:
-
-- **Errors**: Structural problems (missing files, broken YAML, evidence without hypothesis)
-- **Warnings**: Protocol issues (missing actual_command, placeholder values, thin evidence for promote)
+Run \`mlspec validate\` to check for:
+- **Errors**: Structural problems (missing files, broken YAML)
+- **Warnings**: Protocol issues (missing evidence, thin evidence for current-best)
 
 ## Key Rules
 
-1. Do not run vague experiments directly — create hypothesis first.
-2. Change one thing at a time — document controlled variables.
-3. Record actual_command, not just planned_command.
-4. Use real metrics, not placeholder values like \`_auc_delta: _\`.
-5. Do not promote from E1 without warning (thin evidence).
-6. Do not combine tricks without a combination experiment.
+1. Do not run vague experiments — create hypothesis first
+2. Change one thing at a time — document controlled variables
+3. Use real metrics, not placeholder values
+4. Do not accept from smoke as current-best without warning
+5. Skills infer context — CLI stays explicit
 `;

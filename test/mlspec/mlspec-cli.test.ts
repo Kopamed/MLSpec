@@ -30,22 +30,20 @@ vi.mock('../../src/utils/interactive.js', () => ({
 
 describe('MLSpec CLI registration', () => {
   describe('registerMlspecCommands (for standalone mlspec binary)', () => {
-    it('should register init, update, status, validate, new, add-evidence, decide, promote, archive as top-level commands', () => {
+    it('should register init, update, status, validate, new, add-evidence as top-level commands', () => {
       const program = new Command();
       registerMlspecCommands(program);
 
       const commandNames = program.commands.map(c => c.name());
 
-      // These are the expected top-level commands
+      // These are the expected top-level commands in V2
       expect(commandNames).toContain('init');
       expect(commandNames).toContain('update');
       expect(commandNames).toContain('status');
       expect(commandNames).toContain('validate');
       expect(commandNames).toContain('new');
       expect(commandNames).toContain('add-evidence');
-      expect(commandNames).toContain('decide');
-      expect(commandNames).toContain('promote');
-      expect(commandNames).toContain('archive');
+      // V2 no longer has decide, promote, archive as top-level commands
     });
 
     it('should NOT register an "ml" subcommand as the only command', () => {
@@ -64,7 +62,7 @@ describe('MLSpec CLI registration', () => {
       }
     });
 
-    it('should have "new" command with baseline, candidate, experiment sub-commands', () => {
+    it('should have "new" command with recipe and experiment sub-commands', () => {
       const program = new Command();
       registerMlspecCommands(program);
 
@@ -72,8 +70,7 @@ describe('MLSpec CLI registration', () => {
       expect(newCmd).toBeDefined();
 
       const subCommands = newCmd?.commands.map(c => c.name()) || [];
-      expect(subCommands).toContain('baseline');
-      expect(subCommands).toContain('candidate');
+      expect(subCommands).toContain('recipe');
       expect(subCommands).toContain('experiment');
     });
   });
@@ -104,8 +101,8 @@ describe('MLSpec CLI registration', () => {
 });
 
 describe('MLSPEC_WORKFLOWS', () => {
-  it('should have 6 MLSpec workflows', () => {
-    expect(MLSPEC_WORKFLOWS).toHaveLength(6);
+  it('should have 5 MLSpec workflows', () => {
+    expect(MLSPEC_WORKFLOWS).toHaveLength(5);
   });
 
   it('should contain mlspec-* workflows only', () => {
@@ -117,11 +114,10 @@ describe('MLSPEC_WORKFLOWS', () => {
   it('should include all expected MLSpec workflows', () => {
     const expected = [
       'mlspec-explore',
-      'mlspec-propose-experiment',
-      'mlspec-run-evidence',
-      'mlspec-decide',
-      'mlspec-promote',
-      'mlspec-archive',
+      'mlspec-propose',
+      'mlspec-run',
+      'mlspec-resolve',
+      'mlspec-next',
     ];
     expect(MLSPEC_WORKFLOWS).toEqual(expected);
   });
@@ -183,7 +179,7 @@ describe('MlspecInitCommand', () => {
       expect(await fileExists(evaluationPath)).toBe(true);
 
       const content = await fs.readFile(evaluationPath, 'utf-8');
-      expect(content).toContain('MLSpec Evaluation');
+      expect(content).toContain('MLSpec V2 Evaluation');
     });
 
     it('should create mlspec/AGENTS.md', async () => {
@@ -194,7 +190,7 @@ describe('MlspecInitCommand', () => {
       expect(await fileExists(agentsPath)).toBe(true);
 
       const content = await fs.readFile(agentsPath, 'utf-8');
-      expect(content).toContain('MLSpec Agent Experiment Protocol');
+      expect(content).toContain('MLSpec V2 Agent Experiment Protocol');
     });
 
     it('should create mlspec/.workspace.yaml', async () => {
@@ -212,7 +208,8 @@ describe('MlspecInitCommand', () => {
       const initCmd = new MlspecInitCommand({ noTools: true });
       await initCmd.execute(testDir);
 
-      const subdirs = ['baselines', 'experiments', 'candidates', 'findings', 'archive'];
+      // V2 uses recipes/ instead of baselines/, candidates/, and only 3 subdirs
+      const subdirs = ['recipes', 'experiments', 'findings'];
       for (const subdir of subdirs) {
         const subdirPath = path.join(testDir, 'mlspec', subdir);
         expect(await directoryExists(subdirPath)).toBe(true);

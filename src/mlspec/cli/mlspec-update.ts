@@ -198,8 +198,8 @@ export class MlspecUpdateCommand {
       // Just refresh the file with current structure (preserve existing data)
       const workspaceMeta = {
         entity_type: 'evaluation',
-        schema: 'ml-experiment',
-        workspace_version: 1,
+        schema: 'ml-experiment-v2',
+        workspace_version: 2,
       };
       await FileSystemUtils.writeFile(workspacePath, `# MLSpec Workspace\n\n${stringify(workspaceMeta)}`);
     }

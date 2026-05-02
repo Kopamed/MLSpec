@@ -24,11 +24,10 @@ export const WORKFLOW_TO_SKILL_DIR: Record<WorkflowId, string> = {
   'onboard': 'openspec-onboard',
   'propose': 'openspec-propose',
   'mlspec-explore': 'mlspec-explore',
-  'mlspec-propose-experiment': 'mlspec-propose-experiment',
-  'mlspec-run-evidence': 'mlspec-run-evidence',
-  'mlspec-decide': 'mlspec-decide',
-  'mlspec-promote': 'mlspec-promote',
-  'mlspec-archive': 'mlspec-archive',
+  'mlspec-propose': 'mlspec-propose',
+  'mlspec-run': 'mlspec-run',
+  'mlspec-resolve': 'mlspec-resolve',
+  'mlspec-next': 'mlspec-next',
 };
 
 function toKnownWorkflows(workflows: readonly string[]): WorkflowId[] {

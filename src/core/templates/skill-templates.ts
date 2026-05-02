@@ -1,7 +1,7 @@
 /**
  * Agent Skill Templates
  *
- * Compatibility facade that re-exports split workflow template modules.
+ * Re-exports split workflow template modules.
  */
 
 export type { SkillTemplate, CommandTemplate } from './types.js';
@@ -18,9 +18,10 @@ export { getVerifyChangeSkillTemplate, getOpsxVerifyCommandTemplate } from './wo
 export { getOnboardSkillTemplate, getOpsxOnboardCommandTemplate } from './workflows/onboard.js';
 export { getOpsxProposeSkillTemplate, getOpsxProposeCommandTemplate } from './workflows/propose.js';
 export { getFeedbackSkillTemplate } from './workflows/feedback.js';
+
+// MLSpec V2 Skills (replacing V1)
 export { getMlspecExploreSkillTemplate, getMlspecExploreCommandTemplate } from './workflows/mlspec-explore.js';
-export { getMlspecProposeExperimentSkillTemplate, getMlspecProposeExperimentCommandTemplate } from './workflows/mlspec-propose-experiment.js';
-export { getMlspecRunEvidenceSkillTemplate, getMlspecRunEvidenceCommandTemplate } from './workflows/mlspec-run-evidence.js';
-export { getMlspecDecideSkillTemplate, getMlspecDecideCommandTemplate } from './workflows/mlspec-decide.js';
-export { getMlspecPromoteSkillTemplate, getMlspecPromoteCommandTemplate } from './workflows/mlspec-promote.js';
-export { getMlspecArchiveSkillTemplate, getMlspecArchiveCommandTemplate } from './workflows/mlspec-archive.js';
+export { getMlspecProposeSkillTemplate, getMlspecProposeCommandTemplate } from './workflows/mlspec-propose.js';
+export { getMlspecRunSkillTemplate, getMlspecRunCommandTemplate } from './workflows/mlspec-run.js';
+export { getMlspecResolveSkillTemplate, getMlspecResolveCommandTemplate } from './workflows/mlspec-resolve.js';
+export { getMlspecNextSkillTemplate, getMlspecNextCommandTemplate } from './workflows/mlspec-next.js';

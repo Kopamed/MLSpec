@@ -17,11 +17,10 @@ import {
   getOnboardSkillTemplate,
   getOpsxProposeSkillTemplate,
   getMlspecExploreSkillTemplate,
-  getMlspecProposeExperimentSkillTemplate,
-  getMlspecRunEvidenceSkillTemplate,
-  getMlspecDecideSkillTemplate,
-  getMlspecPromoteSkillTemplate,
-  getMlspecArchiveSkillTemplate,
+  getMlspecProposeSkillTemplate,
+  getMlspecRunSkillTemplate,
+  getMlspecResolveSkillTemplate,
+  getMlspecNextSkillTemplate,
   getOpsxExploreCommandTemplate,
   getOpsxNewCommandTemplate,
   getOpsxContinueCommandTemplate,
@@ -34,11 +33,10 @@ import {
   getOpsxOnboardCommandTemplate,
   getOpsxProposeCommandTemplate,
   getMlspecExploreCommandTemplate,
-  getMlspecProposeExperimentCommandTemplate,
-  getMlspecRunEvidenceCommandTemplate,
-  getMlspecDecideCommandTemplate,
-  getMlspecPromoteCommandTemplate,
-  getMlspecArchiveCommandTemplate,
+  getMlspecProposeCommandTemplate,
+  getMlspecRunCommandTemplate,
+  getMlspecResolveCommandTemplate,
+  getMlspecNextCommandTemplate,
   type SkillTemplate,
 } from '../templates/skill-templates.js';
 import type { CommandContent } from '../command-generation/index.js';
@@ -67,6 +65,7 @@ export interface CommandTemplateEntry {
  */
 export function getSkillTemplates(workflowFilter?: readonly string[]): SkillTemplateEntry[] {
   const all: SkillTemplateEntry[] = [
+    // OpenSpec workflows
     { template: getExploreSkillTemplate(), dirName: 'openspec-explore', workflowId: 'explore' },
     { template: getNewChangeSkillTemplate(), dirName: 'openspec-new-change', workflowId: 'new' },
     { template: getContinueChangeSkillTemplate(), dirName: 'openspec-continue-change', workflowId: 'continue' },
@@ -78,12 +77,12 @@ export function getSkillTemplates(workflowFilter?: readonly string[]): SkillTemp
     { template: getVerifyChangeSkillTemplate(), dirName: 'openspec-verify-change', workflowId: 'verify' },
     { template: getOnboardSkillTemplate(), dirName: 'openspec-onboard', workflowId: 'onboard' },
     { template: getOpsxProposeSkillTemplate(), dirName: 'openspec-propose', workflowId: 'propose' },
+    // MLSpec V2 workflows (replacing V1)
     { template: getMlspecExploreSkillTemplate(), dirName: 'mlspec-explore', workflowId: 'mlspec-explore' },
-    { template: getMlspecProposeExperimentSkillTemplate(), dirName: 'mlspec-propose-experiment', workflowId: 'mlspec-propose-experiment' },
-    { template: getMlspecRunEvidenceSkillTemplate(), dirName: 'mlspec-run-evidence', workflowId: 'mlspec-run-evidence' },
-    { template: getMlspecDecideSkillTemplate(), dirName: 'mlspec-decide', workflowId: 'mlspec-decide' },
-    { template: getMlspecPromoteSkillTemplate(), dirName: 'mlspec-promote', workflowId: 'mlspec-promote' },
-    { template: getMlspecArchiveSkillTemplate(), dirName: 'mlspec-archive', workflowId: 'mlspec-archive' },
+    { template: getMlspecProposeSkillTemplate(), dirName: 'mlspec-propose', workflowId: 'mlspec-propose' },
+    { template: getMlspecRunSkillTemplate(), dirName: 'mlspec-run', workflowId: 'mlspec-run' },
+    { template: getMlspecResolveSkillTemplate(), dirName: 'mlspec-resolve', workflowId: 'mlspec-resolve' },
+    { template: getMlspecNextSkillTemplate(), dirName: 'mlspec-next', workflowId: 'mlspec-next' },
   ];
 
   if (!workflowFilter) return all;
@@ -99,6 +98,7 @@ export function getSkillTemplates(workflowFilter?: readonly string[]): SkillTemp
  */
 export function getCommandTemplates(workflowFilter?: readonly string[]): CommandTemplateEntry[] {
   const all: CommandTemplateEntry[] = [
+    // OpenSpec commands
     { template: getOpsxExploreCommandTemplate(), id: 'explore' },
     { template: getOpsxNewCommandTemplate(), id: 'new' },
     { template: getOpsxContinueCommandTemplate(), id: 'continue' },
@@ -110,12 +110,12 @@ export function getCommandTemplates(workflowFilter?: readonly string[]): Command
     { template: getOpsxVerifyCommandTemplate(), id: 'verify' },
     { template: getOpsxOnboardCommandTemplate(), id: 'onboard' },
     { template: getOpsxProposeCommandTemplate(), id: 'propose' },
+    // MLSpec V2 commands
     { template: getMlspecExploreCommandTemplate(), id: 'mlspec-explore' },
-    { template: getMlspecProposeExperimentCommandTemplate(), id: 'mlspec-propose-experiment' },
-    { template: getMlspecRunEvidenceCommandTemplate(), id: 'mlspec-run-evidence' },
-    { template: getMlspecDecideCommandTemplate(), id: 'mlspec-decide' },
-    { template: getMlspecPromoteCommandTemplate(), id: 'mlspec-promote' },
-    { template: getMlspecArchiveCommandTemplate(), id: 'mlspec-archive' },
+    { template: getMlspecProposeCommandTemplate(), id: 'mlspec-propose' },
+    { template: getMlspecRunCommandTemplate(), id: 'mlspec-run' },
+    { template: getMlspecResolveCommandTemplate(), id: 'mlspec-resolve' },
+    { template: getMlspecNextCommandTemplate(), id: 'mlspec-next' },
   ];
 
   if (!workflowFilter) return all;

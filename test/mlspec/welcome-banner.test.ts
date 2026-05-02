@@ -33,19 +33,20 @@ describe('MlspecWelcomeBanner content', () => {
     expect(source).toContain('MLSpec slash commands');
   });
 
-  it('should contain workflow terms: hypothesis, evidence, decision', async () => {
+  it('should contain workflow terms: explore, propose, run, resolve', async () => {
     const fs = await import('fs');
     const source = fs.readFileSync('./src/mlspec/ui/welcome-banner.ts', 'utf-8');
-    expect(source).toMatch(/hypothesis|evidence|decision/);
+    expect(source).toMatch(/explore|propose|run|resolve/);
   });
 
-  it('should contain main slash commands: /mlspec-explore, /mlspec-propose-experiment, /mlspec-run-evidence, /mlspec-decide', async () => {
+  it('should contain main slash commands: /mlspec-explore, /mlspec-propose, /mlspec-run, /mlspec-resolve, /mlspec-next', async () => {
     const fs = await import('fs');
     const source = fs.readFileSync('./src/mlspec/ui/welcome-banner.ts', 'utf-8');
     expect(source).toContain('/mlspec-explore');
-    expect(source).toContain('/mlspec-propose-experiment');
-    expect(source).toContain('/mlspec-run-evidence');
-    expect(source).toContain('/mlspec-decide');
+    expect(source).toContain('/mlspec-propose');
+    expect(source).toContain('/mlspec-run');
+    expect(source).toContain('/mlspec-resolve');
+    expect(source).toContain('/mlspec-next');
   });
 
   it('should have Press Enter to select tools prompt', async () => {

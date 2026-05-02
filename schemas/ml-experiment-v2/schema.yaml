@@ -1,0 +1,153 @@
+name: ml-experiment-v2
+version: 2
+description: ML experimentation workflow V2 - recipe graph with parent links, semantic evidence stages, and direct resolution verbs
+
+artifacts:
+  - id: evaluation
+    generates: evaluation.md
+    description: MLSpec workspace evaluation document
+    template: evaluation.md
+    instruction: |
+      The evaluation document provides an overview of the ML experimentation workspace.
+      It should contain:
+      - Workspace purpose and scope
+      - Current-best recipe and its performance
+      - Active experiments and their status
+      - Key findings and recommendations
+
+      This is the entry point for understanding the MLSpec workspace.
+    requires: []
+
+  - id: recipe
+    generates: "recipes/*/recipe.yaml"
+    description: Recipe entity with parent lineage
+    template: recipe.yaml
+    instruction: |
+      A recipe represents a complete runnable ML pipeline. Recipes form a graph via parent_recipe links.
+
+      Recipe metadata should include:
+      - entity_type: recipe
+      - id: globally unique identifier (kebab-case)
+      - name: human-readable name
+      - tags: array of tags (baseline, candidate, current-best, variant, archived)
+      - parent_recipe: reference to parent recipe ID or null
+      - created_by_experiment: reference to creating experiment ID or null
+      - config: full ML pipeline configuration
+
+      Recipe config should include:
+      - data: dataset configuration
+      - preprocessing: list of preprocessing steps
+      - model: model type and hyperparameters
+      - training: training configuration
+      - inference: inference configuration
+      - artifacts: expected artifact files
+    requires: []
+
+  - id: hypothesis
+    generates: "experiments/*/hypothesis.md"
+    description: Experiment hypothesis document
+    template: hypothesis.md
+    instruction: |
+      The hypothesis document defines what the experiment is testing.
+
+      It should contain:
+      - The hypothesis being tested
+      - base_recipe: the recipe being modified
+      - proposed_recipe: the proposed new recipe ID
+      - proposed_change: description of what changes from base
+      - controlled_variables: what stays fixed
+      - success_criteria: metric thresholds for acceptance
+      - abort_criteria: conditions for early termination
+      - evidence_plan: planned evidence stages (smoke, validation, final)
+
+      This is created automatically when a new experiment is initialized.
+    requires: []
+
+  - id: evidence
+    generates: "experiments/*/evidence/*.md"
+    description: Evidence files at semantic stages (smoke/validation/final)
+    template: evidence/smoke.md
+    alternativeTemplates:
+      - id: evidence-validation
+        template: evidence/validation.md
+      - id: evidence-final
+        template: evidence/final.md
+    instruction: |
+      Evidence files document results at semantic evaluation stages.
+
+      Evidence stages:
+      - smoke: Cheap signal check (does it run? is there signal?)
+      - validation: Trusted local evaluation (does it beat base?)
+      - final: External/submission/production result
+
+      Each evidence file should contain:
+      - YAML frontmatter with entity_type, experiment_id, stage, created
+      - runs[]: array of individual run results
+      - aggregate{}: aggregated statistics across runs
+      - summary: human-readable summary
+      - recommendation: suggested next action
+
+      Runs should contain:
+      - seed: random seed used
+      - command: actual command executed
+      - completed: ISO timestamp
+      - duration_minutes: execution time
+      - metrics: key-value pairs of metric values
+    requires:
+      - hypothesis
+
+  - id: resolution
+    generates: "experiments/*/resolution.md"
+    description: Experiment resolution document
+    template: resolution.md
+    instruction: |
+      The resolution document records the final outcome of an experiment.
+
+      It should contain:
+      - entity_type: resolution
+      - experiment_id: the experiment ID
+      - resolution: accept | reject | retry | hold | inconclusive
+      - accepted_recipe, accepted_tags (if accept)
+      - rejection_reason, uncertainty_reason, blocker (if applicable)
+      - revisit_condition, retry_plan (if applicable)
+      - rationale: explanation of decision
+      - supporting_evidence[]: references to evidence
+
+      Resolution types:
+      - accept: Create new recipe from experiment
+      - reject: End experiment, no recipe created
+      - retry: Return to running with modifications
+      - hold: Pause for later
+      - inconclusive: Evidence neither supports nor refutes hypothesis
+    requires:
+      - evidence
+
+  - id: finding
+    generates: "findings/*.md"
+    description: Knowledge base findings
+    template: finding.md
+    instruction: |
+      Findings are manually maintained knowledge about what works and what doesn't.
+      They should contain:
+      - What works (with experiment references)
+      - What doesn't work (with experiment references)
+      - Context and caveats
+      - Confidence level
+
+      Findings are NOT auto-generated. They represent synthesized knowledge.
+    requires: []
+
+apply:
+  requires: []
+  tracks: null
+  instruction: |
+    MLSpec V2 commands are implemented as 'mlspec <command>'.
+    Use 'mlspec --help' to see available commands.
+
+    Key commands:
+    - mlspec new recipe <id>: Create a new baseline recipe
+    - mlspec new experiment <id> --from <recipe> --proposes <recipe>: Create experiment
+    - mlspec add-evidence <experiment> --stage <stage>: Record evidence
+    - mlspec accept|reject|retry|hold|inconclusive <experiment>: Resolve experiment
+    - mlspec graph: Show recipe-experiment graph
+    - mlspec next: Recommend next action

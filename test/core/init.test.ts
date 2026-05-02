@@ -562,8 +562,8 @@ describe('InitCommand - profile and detection features', () => {
       delivery: 'both',
       workflows: [
         'propose', 'explore', 'apply', 'archive',
-        'mlspec-explore', 'mlspec-propose-experiment', 'mlspec-run-evidence',
-        'mlspec-decide', 'mlspec-promote', 'mlspec-archive',
+        'mlspec-explore', 'mlspec-propose', 'mlspec-run',
+        'mlspec-resolve', 'mlspec-next',
       ],
     });
 
@@ -573,11 +573,10 @@ describe('InitCommand - profile and detection features', () => {
     // Verify MLSpec skill files exist
     const mlspecSkills = [
       '.opencode/skills/mlspec-explore/SKILL.md',
-      '.opencode/skills/mlspec-propose-experiment/SKILL.md',
-      '.opencode/skills/mlspec-run-evidence/SKILL.md',
-      '.opencode/skills/mlspec-decide/SKILL.md',
-      '.opencode/skills/mlspec-promote/SKILL.md',
-      '.opencode/skills/mlspec-archive/SKILL.md',
+      '.opencode/skills/mlspec-propose/SKILL.md',
+      '.opencode/skills/mlspec-run/SKILL.md',
+      '.opencode/skills/mlspec-resolve/SKILL.md',
+      '.opencode/skills/mlspec-next/SKILL.md',
     ];
     for (const skillPath of mlspecSkills) {
       const fullPath = path.join(testDir, skillPath);
@@ -592,11 +591,10 @@ describe('InitCommand - profile and detection features', () => {
     // Verify MLSpec command files exist with mlspec-*.md naming
     const mlspecCommands = [
       '.opencode/commands/mlspec-explore.md',
-      '.opencode/commands/mlspec-propose-experiment.md',
-      '.opencode/commands/mlspec-run-evidence.md',
-      '.opencode/commands/mlspec-decide.md',
-      '.opencode/commands/mlspec-promote.md',
-      '.opencode/commands/mlspec-archive.md',
+      '.opencode/commands/mlspec-propose.md',
+      '.opencode/commands/mlspec-run.md',
+      '.opencode/commands/mlspec-resolve.md',
+      '.opencode/commands/mlspec-next.md',
     ];
     for (const cmdPath of mlspecCommands) {
       const fullPath = path.join(testDir, cmdPath);

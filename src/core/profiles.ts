@@ -29,11 +29,10 @@ export const ALL_WORKFLOWS = [
   'verify',
   'onboard',
   'mlspec-explore',
-  'mlspec-propose-experiment',
-  'mlspec-run-evidence',
-  'mlspec-decide',
-  'mlspec-promote',
-  'mlspec-archive',
+  'mlspec-propose',
+  'mlspec-run',
+  'mlspec-resolve',
+  'mlspec-next',
 ] as const;
 
 export type WorkflowId = (typeof ALL_WORKFLOWS)[number];

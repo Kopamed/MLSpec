@@ -30,7 +30,6 @@ import {
   type SchemasOptions,
   type NewChangeOptions,
 } from '../commands/workflow/index.js';
-import { registerMlspecCommand } from '../mlspec/cli.js';
 import { maybeShowTelemetryNotice, trackCommand, shutdown } from '../telemetry/index.js';
 
 const program = new Command();
@@ -286,7 +285,6 @@ program
 registerSpecCommand(program);
 registerConfigCommand(program);
 registerSchemaCommand(program);
-registerMlspecCommand(program);
 
 // Top-level validate command
 program

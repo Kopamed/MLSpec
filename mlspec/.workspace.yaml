@@ -1,0 +1,5 @@
+# MLSpec Workspace
+
+entity_type: evaluation
+schema: ml-experiment
+workspace_version: 1

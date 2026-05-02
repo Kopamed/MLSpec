@@ -1,13 +1,23 @@
 # MLSpec
 
-**An evidence-driven ML experimentation framework for AI agents.**
+**An evidence-driven ML experimentation framework for AI agents, powered by OpenSpec.**
 
 ```text
 Workflow:
-  explore → hypothesis → evidence → decision → candidate → archive → findings
+  explore → propose → run → resolve → next
 ```
 
 MLSpec gives AI agents a structured methodology for running ML experiments. Instead of ad-hoc trial-and-error, MLSpec guides agents through a disciplined experiment lifecycle with hypothesis validation, evidence collection, and systematic decision-making.
+
+## Powered by OpenSpec
+
+MLSpec is built on top of [OpenSpec](https://github.com/Fission-AI/OpenSpec), a spec-driven development framework. This means MLSpec inherits:
+
+- OpenSpec's skill generation system for 25+ AI tools
+- OpenSpec's CLI framework and workflow system
+- OpenSpec's artifact and change management
+
+**What this means:** When you install MLSpec, you get the full OpenSpec infrastructure plus MLSpec-specific commands and skills.
 
 ## Installation
 
@@ -42,26 +52,49 @@ After initialization, your AI agent can use these slash commands:
 
 | Command | Description |
 |---------|-------------|
-| `/mlspec-explore` | Explore failure modes and ML experiment ideas |
-| `/mlspec-propose-experiment` | Create an experiment with hypothesis |
-| `/mlspec-run-evidence` | Run an evidence level (E1, E2, etc.) |
-| `/mlspec-decide` | Write a decision from evidence (promote/reject/hold) |
-| `/mlspec-promote` | Promote experiment to candidate version |
-| `/mlspec-archive` | Archive a decided experiment |
+| `/mlspec-explore` | Explore ML experiment ideas and workspace |
+| `/mlspec-propose` | Create experiment from idea |
+| `/mlspec-run` | Run or record evidence for a stage |
+| `/mlspec-resolve` | Resolve experiment (accept/reject/retry/hold/inconclusive) |
+| `/mlspec-next` | Read-only router for next action |
 
 ## CLI Commands
 
 ```bash
-mlspec status                    # Show workspace status
-mlspec validate                  # Validate workspace structure
-mlspec new experiment <name>    # Create new experiment
-mlspec new baseline <name>      # Create baseline
-mlspec new candidate <name>     # Create candidate
-mlspec add-evidence <exp> --level E1   # Add evidence
-mlspec decide <exp> --decision promote  # Make decision
-mlspec promote <exp> --to <candidate>   # Promote to candidate
-mlspec archive <exp>            # Archive experiment
-mlspec update                   # Refresh skills for tools
+mlspec init                          # Initialize workspace
+mlspec update                       # Refresh skills for tools
+
+# Recipe commands
+mlspec new recipe <id> [--tag]      # Create baseline recipe
+mlspec tag recipe <id> <tag>        # Add tag
+mlspec untag recipe <id> <tag>       # Remove tag
+mlspec list recipes [--tag]          # List recipes
+mlspec show recipe <id>             # Show recipe details
+mlspec diff <recipe-a> <recipe-b>   # Compare recipes
+
+# Experiment commands
+mlspec new experiment <id> --from <base> --proposes <proposed>  # Create experiment
+mlspec set-status <exp> <status>   # Set status (draft/running/resolved)
+
+# Evidence commands
+mlspec add-evidence <exp> --stage <stage>   # Add evidence (smoke/validation/final)
+mlspec show evidence <exp>             # Show evidence summary
+
+# Resolution commands
+mlspec accept <exp> --as <recipe> [--tag]   # Accept, create recipe
+mlspec reject <exp> --reason <reason>       # Reject
+mlspec retry <exp> --plan <plan>             # Retry with modifications
+mlspec hold <exp> --reason <reason>         # Hold for later
+mlspec inconclusive <exp> --reason <reason>  # Inconclusive
+
+# Graph commands
+mlspec graph [--format text|mermaid|dot]   # Show recipe-experiment graph
+mlspec lineage <recipe-id>                  # Show recipe ancestry
+mlspec next                                 # Read-only router
+
+# Status and validation
+mlspec status                               # Show workspace status
+mlspec validate                             # Validate workspace
 ```
 
 ## Workflow
@@ -69,43 +102,51 @@ mlspec update                   # Refresh skills for tools
 ```
 1. Explore
    /mlspec-explore
-   → Identify failure modes, understand the problem space
+   → Understand workspace, identify opportunities
 
-2. Hypothesis
-   /mlspec-propose-experiment <name>
-   → Form hypothesis: "I believe X will improve Y because Z"
+2. Propose
+   /mlspec-propose <id> --from <base> --proposes <proposed>
+   → Define hypothesis, controlled variables, success criteria
 
-3. Evidence
-   /mlspec-run-evidence <experiment> --level E1
-   → Run experiments, collect metrics, document results
+3. Run
+   /mlspec-run <experiment> <stage>
+   → Record evidence at smoke/validation/final stages
 
-4. Decision
-   /mlspec-decide <experiment> --decision promote|reject|hold
-   → Evaluate evidence against hypothesis
+4. Resolve
+   /mlspec-resolve <experiment>
+   → Accept/reject/retry/hold based on evidence
 
-5. Candidate
-   /mlspec-promote <experiment> --to <candidate-name>
-   → Promote successful experiments to candidate versions
-
-6. Archive
-   /mlspec archive <experiment>
-   → Archive completed experiments with their decisions
+5. Next
+   /mlspec-next
+   → Get recommended next action
 ```
+
+## Evidence Stages
+
+| Stage | Purpose |
+|-------|---------|
+| smoke | Cheap signal check — does it run? Is there signal? |
+| validation | Trusted local evaluation — does it beat base? |
+| final | External/production result |
 
 ## Workspace Structure
 
 ```
 mlspec/
-├── baselines/           # Baseline experiments
+├── recipes/              # Recipe graph (replaces baselines/candidates)
+│   └── <recipe-id>/
+│       ├── recipe.yaml
+│       └── summary.md
 ├── experiments/         # Active experiments
 │   └── <experiment>/
+│       ├── experiment.yaml
 │       ├── hypothesis.md
 │       ├── evidence/
-│       │   └── E1.md
-│       └── decision.md
-├── candidates/          # Promoted candidates
-├── findings/           # Key learnings
-└── archive/           # Archived experiments
+│       │   ├── smoke.md
+│       │   ├── validation.md
+│       │   └── final.md
+│       └── resolution.md
+└── findings/           # Key learnings
 ```
 
 ## Requirements
@@ -113,11 +154,11 @@ mlspec/
 - Node.js 20.19.0+
 - AI coding tool (Claude Code, OpenCode, Cursor, Windsurf, etc.)
 
-## Documentation
-
-- [OpenSpec Docs](https://github.com/Fission-AI/OpenSpec) - Core framework
-- [Getting Started](docs/getting-started.md) - Step-by-step guide
-
 ## License
 
-MIT
+MIT License - Copyright (c) 2024 OpenSpec Contributors
+
+## Links
+
+- [OpenSpec](https://github.com/Fission-AI/OpenSpec) - The underlying framework
+- [MLSpec Issues](https://github.com/Kopamed/MLSpec/issues) - Report bugs or request features

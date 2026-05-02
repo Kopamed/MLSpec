@@ -50,20 +50,15 @@ export function mlspecWorkspaceExists(projectPath: string): boolean {
 }
 
 /**
- * Create MLSpec workspace directory structure.
+ * Create MLSpec V2 workspace directory structure.
  */
 export async function createMlspecWorkspace(projectPath: string): Promise<void> {
-  const subdirs = ['baselines', 'experiments', 'candidates', 'findings', 'archive'];
+  // V2 uses recipes/ instead of baselines/candidates/, no archive/
+  const subdirs = ['recipes', 'experiments', 'findings'];
 
   for (const subdir of subdirs) {
     const dirPath = resolveMlspecPath(projectPath, subdir);
     await fsp.mkdir(dirPath, { recursive: true });
-  }
-
-  // Create archive subdirectories
-  for (const subdir of Object.values(ARCHIVE_SUBDIRS)) {
-    const archiveSubdirPath = resolveMlspecPath(projectPath, 'archive', subdir);
-    await fsp.mkdir(archiveSubdirPath, { recursive: true });
   }
 }
 

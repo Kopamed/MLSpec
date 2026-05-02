@@ -1,21 +1,22 @@
 {
-  "name": "@fission-ai/openspec",
-  "version": "1.3.1",
-  "description": "AI-native system for spec-driven development",
+  "name": "@kopamed/mlspec",
+  "version": "1.0.0",
+  "description": "An evidence-driven ML experimentation framework for AI agents",
   "keywords": [
-    "openspec",
-    "specs",
-    "cli",
+    "mlspec",
+    "ml",
+    "experiments",
     "ai",
-    "development"
+    "machine-learning",
+    "workflow"
   ],
-  "homepage": "https://github.com/Fission-AI/OpenSpec",
+  "homepage": "https://github.com/Kopamed/MLSpec",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Fission-AI/OpenSpec"
+    "url": "https://github.com/Kopamed/MLSpec"
   },
   "license": "MIT",
-  "author": "OpenSpec Contributors",
+  "author": "Kopamed",
   "type": "module",
   "publishConfig": {
     "access": "public"

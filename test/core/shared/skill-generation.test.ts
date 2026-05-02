@@ -8,9 +8,9 @@ import {
 
 describe('skill-generation', () => {
   describe('getSkillTemplates', () => {
-    it('should return all 17 skill templates', () => {
+    it('should return all 16 skill templates', () => {
       const templates = getSkillTemplates();
-      expect(templates).toHaveLength(17);
+      expect(templates).toHaveLength(16);
     });
 
     it('should have unique directory names', () => {
@@ -36,11 +36,10 @@ describe('skill-generation', () => {
       expect(dirNames).toContain('openspec-onboard');
       expect(dirNames).toContain('openspec-propose');
       expect(dirNames).toContain('mlspec-explore');
-      expect(dirNames).toContain('mlspec-propose-experiment');
-      expect(dirNames).toContain('mlspec-run-evidence');
-      expect(dirNames).toContain('mlspec-decide');
-      expect(dirNames).toContain('mlspec-promote');
-      expect(dirNames).toContain('mlspec-archive');
+      expect(dirNames).toContain('mlspec-propose');
+      expect(dirNames).toContain('mlspec-run');
+      expect(dirNames).toContain('mlspec-resolve');
+      expect(dirNames).toContain('mlspec-next');
     });
 
     it('should have valid template structure', () => {
@@ -94,9 +93,9 @@ describe('skill-generation', () => {
   });
 
   describe('getCommandTemplates', () => {
-    it('should return all 17 command templates', () => {
+    it('should return all 16 command templates', () => {
       const templates = getCommandTemplates();
-      expect(templates).toHaveLength(17);
+      expect(templates).toHaveLength(16);
     });
 
     it('should have unique IDs', () => {
@@ -148,9 +147,9 @@ describe('skill-generation', () => {
   });
 
   describe('getCommandContents', () => {
-    it('should return all 17 command contents', () => {
+    it('should return all 16 command contents', () => {
       const contents = getCommandContents();
-      expect(contents).toHaveLength(17);
+      expect(contents).toHaveLength(16);
     });
 
     it('should have valid content structure', () => {
@@ -308,16 +307,15 @@ describe('skill-generation', () => {
   describe('MLSpec workflows', () => {
     const MLSPEC_WORKFLOWS = [
       'mlspec-explore',
-      'mlspec-propose-experiment',
-      'mlspec-run-evidence',
-      'mlspec-decide',
-      'mlspec-promote',
-      'mlspec-archive',
+      'mlspec-propose',
+      'mlspec-run',
+      'mlspec-resolve',
+      'mlspec-next',
     ];
 
-    it('should return all 6 MLSpec skill templates when filtered', () => {
+    it('should return all 5 MLSpec skill templates when filtered', () => {
       const filtered = getSkillTemplates(MLSPEC_WORKFLOWS);
-      expect(filtered).toHaveLength(6);
+      expect(filtered).toHaveLength(5);
     });
 
     it('should have correct directory names for MLSpec skills', () => {
@@ -348,9 +346,9 @@ describe('skill-generation', () => {
       }
     });
 
-    it('should return all 6 MLSpec command templates when filtered', () => {
+    it('should return all 5 MLSpec command templates when filtered', () => {
       const filtered = getCommandTemplates(MLSPEC_WORKFLOWS);
-      expect(filtered).toHaveLength(6);
+      expect(filtered).toHaveLength(5);
     });
 
     it('should have correct IDs for MLSpec commands', () => {
@@ -386,7 +384,7 @@ describe('skill-generation', () => {
 
     it('should generate command contents for MLSpec workflows', () => {
       const contents = getCommandContents(MLSPEC_WORKFLOWS);
-      expect(contents).toHaveLength(6);
+      expect(contents).toHaveLength(5);
 
       for (const content of contents) {
         expect(content.id).toMatch(/^mlspec-/);
