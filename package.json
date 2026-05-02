@@ -1,15 +1,8 @@
 {
-  "name": "@kopamed/mlspec",
+  "name": "mlspec",
   "version": "2.1.0",
-  "description": "An evidence-driven ML experimentation framework for AI agents",
-  "keywords": [
-    "mlspec",
-    "ml",
-    "experiments",
-    "ai",
-    "machine-learning",
-    "workflow"
-  ],
+  "description": "Agent-native ML experiment tracking and model evaluation framework for reproducible machine learning research",
+  "keywords": "[\"mlspec\",\"machine-learning\",\"mlops\",\"experiment-tracking\",\"model-evaluation\",\"reproducibility\",\"ai-agents\",\"agentic\",\"experiments\",\"research\",\"cli\",\"opencode\"]",
   "homepage": "https://github.com/Kopamed/MLSpec",
   "repository": {
     "type": "git",

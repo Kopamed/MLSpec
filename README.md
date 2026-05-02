@@ -1,6 +1,6 @@
 # MLSpec
 
-**An evidence-driven ML experimentation framework for AI agents.**
+**Agent-native ML experiment tracking and model evaluation for reproducible machine learning research.**
 
 MLSpec was inspired by OpenSpec's spec-driven workflow, but is a separate tool focused on ML experimentation.
 
@@ -17,10 +17,10 @@ MLSpec gives AI agents a structured methodology for running ML experiments. Inst
 
 ```bash
 # Install MLSpec globally
-npm install -g @kopamed/mlspec@latest
+npm install -g mlspec@latest
 
 # Or use it without installing (npx)
-npx @kopamed/mlspec@latest --help
+npx mlspec@latest --help
 ```
 
 ## Quick Start
