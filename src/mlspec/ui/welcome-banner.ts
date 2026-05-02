@@ -2,7 +2,6 @@
  * MLSpec Welcome Banner
  *
  * Shows a static ASCII art welcome banner with MLSpec branding.
- * Styled to match OpenSpec's welcome screen for visual consistency.
  */
 
 import chalk from 'chalk';

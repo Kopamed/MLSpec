@@ -387,7 +387,7 @@ _Next steps and priorities for the ML experimentation effort._
     }
 
     console.log();
-    console.log(chalk.dim('Learn more: https://github.com/Fission-AI/OpenSpec'));
+    console.log(chalk.dim('Learn more: https://github.com/Kopamed/MLSpec'));
     console.log();
   }
 }

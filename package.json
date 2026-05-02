@@ -1,6 +1,6 @@
 {
   "name": "@kopamed/mlspec",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "An evidence-driven ML experimentation framework for AI agents",
   "keywords": [
     "mlspec",
@@ -28,13 +28,17 @@
     }
   },
   "bin": {
-    "openspec": "./bin/openspec.js",
     "mlspec": "./bin/mlspec.js"
   },
   "files": [
-    "dist",
-    "bin",
-    "schemas",
+    "dist/mlspec",
+    "dist/core",
+    "dist/telemetry",
+    "dist/utils",
+    "dist/ui",
+    "dist/prompts",
+    "bin/mlspec.js",
+    "schemas/ml-experiment-v2",
     "scripts/postinstall.js",
     "!dist/**/*.test.js",
     "!dist/**/__tests__",

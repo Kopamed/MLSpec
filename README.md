@@ -1,6 +1,8 @@
 # MLSpec
 
-**An evidence-driven ML experimentation framework for AI agents, powered by OpenSpec.**
+**An evidence-driven ML experimentation framework for AI agents.**
+
+MLSpec was inspired by OpenSpec's spec-driven workflow, but is a separate tool focused on ML experimentation.
 
 ```text
 Workflow:
@@ -8,16 +10,6 @@ Workflow:
 ```
 
 MLSpec gives AI agents a structured methodology for running ML experiments. Instead of ad-hoc trial-and-error, MLSpec guides agents through a disciplined experiment lifecycle with hypothesis validation, evidence collection, and systematic decision-making.
-
-## Powered by OpenSpec
-
-MLSpec is built on top of [OpenSpec](https://github.com/Fission-AI/OpenSpec), a spec-driven development framework. This means MLSpec inherits:
-
-- OpenSpec's skill generation system for 25+ AI tools
-- OpenSpec's CLI framework and workflow system
-- OpenSpec's artifact and change management
-
-**What this means:** When you install MLSpec, you get the full OpenSpec infrastructure plus MLSpec-specific commands and skills.
 
 ## Installation
 
@@ -68,7 +60,7 @@ mlspec update                       # Refresh skills for tools
 mlspec new recipe <id> [--tag]      # Create baseline recipe
 mlspec tag recipe <id> <tag>        # Add tag
 mlspec untag recipe <id> <tag>       # Remove tag
-mlspec list recipes [--tag]          # List recipes
+mlspec list recipes [--tag]         # List recipes
 mlspec show recipe <id>             # Show recipe details
 mlspec diff <recipe-a> <recipe-b>   # Compare recipes
 
@@ -83,7 +75,7 @@ mlspec show evidence <exp>             # Show evidence summary
 # Resolution commands
 mlspec accept <exp> --as <recipe> [--tag]   # Accept, create recipe
 mlspec reject <exp> --reason <reason>       # Reject
-mlspec retry <exp> --plan <plan>             # Retry with modifications
+mlspec retry <exp> --plan <plan>            # Retry with modifications
 mlspec hold <exp> --reason <reason>         # Hold for later
 mlspec inconclusive <exp> --reason <reason>  # Inconclusive
 
@@ -156,9 +148,8 @@ mlspec/
 
 ## License
 
-MIT License - Copyright (c) 2024 OpenSpec Contributors
+MIT License - Copyright (c) 2024 Kopamed
 
 ## Links
 
-- [OpenSpec](https://github.com/Fission-AI/OpenSpec) - The underlying framework
 - [MLSpec Issues](https://github.com/Kopamed/MLSpec/issues) - Report bugs or request features
