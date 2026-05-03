@@ -3,12 +3,13 @@
  *
  * Skill for running or recording evidence for experiments.
  */
-import type { SkillTemplate, CommandTemplate } from '../types.js';
+import type { SkillTemplate, CommandTemplate } from "../types.js";
 
 export function getMlspecRunSkillTemplate(): SkillTemplate {
   return {
-    name: 'mlspec-run',
-    description: 'Run or record evidence for an experiment at a specific stage (smoke, validation, final). Infers experiment ID and stage from context.',
+    name: "mlspec-run",
+    description:
+      "Run or record evidence for an experiment at a specific stage (smoke, validation, final). Infers experiment ID and stage from context.",
     instructions: `Run or record evidence for an experiment.
 
 This skill records evidence for an experiment at a specific stage. It infers the experiment ID and stage from workspace state and conversation context.
@@ -234,6 +235,188 @@ recommendation: accept
 
 ---
 
+## Run-Readiness: Dataset Profiling
+
+Before recording evidence for full training runs (not smoke), ensure dataset profiling is documented in the evidence body.
+
+### Dataset Profiling Checklist
+
+In the evidence Markdown body, include a section like:
+
+\`\`\`markdown
+## Dataset Profile
+
+- raw_examples: <count>
+- raw_token_count: <count>
+- generated_sequences: <count after tokenization/chunking>
+- generated_tokens: <count>
+- seq_len: <e.g., 256, 512, 1024>
+- chunking_strategy: <e.g., first, random, sliding-window>
+- packing_strategy: <e.g., none, greedy, sorted>
+- avg_raw_tokens_per_example: <average tokens per raw example>
+- tokens_per_epoch: <estimated tokens per epoch>
+- planned_training_tokens: <tokens_per_epoch * num_epochs>
+
+### Dataset Efficiency Metrics
+
+- generated_tokens / raw_token_count: <retention ratio>
+- dropped_token_ratio: <tokens lost to chunking/packing>
+- padding_ratio: <fraction of sequence that is padding>
+- avg_tokens_per_sequence: <generated_tokens / generated_sequences>
+- sequence_utilization: <avg_tokens_per_sequence / seq_len>
+\`\`\`
+
+### TinyStories Anomaly Detection
+
+If avg_raw_tokens_per_example is 50-70 tokens with seq_len=256, flag:
+> "High chunking overhead: avg example 50-70 tokens with seq_len=256 means most of sequence is padding"
+
+If generated_tokens is much smaller than raw_token_count (e.g., < 0.3x), flag:
+> "Suspiciously low generated_tokens relative to raw_token_count - verify chunking/packing is intentional"
+
+---
+
+## Run-Readiness: Accelerator Preflight
+
+Before running training, check accelerator availability:
+
+- CUDA availability and GPU count
+- ROCm availability and GPU count
+- MPS (Apple Silicon) availability
+- CPU-only fallback
+- dtype support: bf16, fp16, fp32
+
+### Full Training Requires Accelerator
+
+If full training is requested and no accelerator is available:
+> "Full training on CPU is not recommended; use smoke stages only or explicitly acknowledge CPU intent"
+
+### Smoke Stages on CPU
+
+Smoke-import and smoke-onebatch may proceed on CPU with explicit user acknowledgment.
+
+---
+
+## Run-Readiness: Training Ladder
+
+For evidence body, include training ladder checklist:
+
+\`\`\`markdown
+## Training Ladder
+
+- [ ] smoke-import: completed (N steps)
+- [ ] smoke-onebatch: completed (N steps)
+- [ ] smoke-tinyoverfit: completed (N steps, overfit_loss=X)
+- [ ] checkpoint-short: completed (path: ...)
+- [ ] resume-checkpoint: completed
+- [ ] full-run: completed (max_steps=N, max_tokens=N)
+\`\`\`
+
+Full-run evidence requires earlier ladder stages to be completed.
+
+---
+
+## Run-Readiness: Live Logging
+
+When running training, use live logging with tee:
+
+- Recommended: Pipe output through \`tee outputs/<experiment-id>/logs/training.log\`
+- NOT recommended: \`| tail -30\` or tail-only patterns
+
+Create log directory before training: \`outputs/<experiment-id>/logs/\` (runtime-only, not version-controlled)
+
+---
+
+## Run-Readiness: Preprocessing Cache
+
+In the evidence body, document preprocessing cache:
+
+\`\`\`markdown
+## Preprocessing Cache
+
+- cache_key: <hash-of-data-and-preprocessing>
+- cache_valid: true/false
+- data_hash: <hex-string>
+- preprocessing_version: <version-string>
+- cache_location: outputs/<experiment-id>/cache/
+\`\`\`
+
+Cache artifacts are runtime-only state; do not commit to version control.
+
+---
+
+## Target-Leakage Sanity Check
+
+Before accepting training evidence, verify autoregressive training is correctly shifted.
+
+### Label Shift Check
+
+Evidence Markdown body SHALL include one of:
+- \`autoregressive_shift_verified: true\` with verification method description
+- \`autoregressive_shift_not_applicable: true\` with reason
+
+### Causal LM Verification
+
+When claiming \`autoregressive_shift_verified: true\`, document the verification method:
+
+**Code review:** Cite specific file and line where loss is computed, the slice used (\`logits[:, :-1, :]\` vs \`logits[:, 1:, :]\`), confirmation that input_ids is shifted correctly.
+
+**Unit test:** Include test name/location, verify with input_ids \`[A, B, C, D]\` loss at position 0 is computed against token B not A, test output showing loss is non-zero on shifted targets.
+
+### Near-Zero Loss Warning
+
+If training loss drops below 0.01:
+> "Near-zero loss detected. Verify autoregressive shift is correct."
+
+Include \`loss_sanity_note\` in evidence explaining why loss is reasonable.
+
+### Loss-Generation Consistency
+
+If loss is near-zero AND generation collapse metrics indicate bad generation:
+> "SANITY CHECK FAILED: Near-zero loss with bad generation indicates possible target-leakage"
+
+The skill SHALL stop and require an investigation note before writing/accepting evidence.
+
+With investigation note, evidence MAY be recorded with \`sanity_override: true\`.
+
+---
+
+## Generation-Collapse Metrics
+
+Evidence Markdown body SHALL include:
+
+\`\`\`markdown
+## Generation Collapse Metrics
+
+- repetition_rate: <ratio of repeated n-grams>
+- distinct_1: <ratio of unique unigrams to total tokens>
+- distinct_2: <ratio of unique bigrams to total tokens>
+- max_token_run: <longest run of repeated tokens>
+- punctuation_only_ratio: <ratio of punctuation-only tokens>
+- special_token_ratio: <ratio of special tokens>
+- top_token_frequency: <frequency of most common token>
+\`\`\`
+
+### Warning Thresholds
+
+- repetition_rate > 0.3: "High repetition detected"
+- distinct_1 < 0.3: "Low vocabulary diversity"
+- max_token_run > 10: "Long repeated token run detected"
+
+### Collapse Threshold
+
+If repetition_rate > 0.7 OR distinct_1 < 0.1 OR max_token_run > 50:
+> "Generation collapse detected"
+
+The skill SHALL stop and require an investigation note before writing/accepting evidence.
+
+### Fixed-Prompt Samples
+
+Include samples from 3-5 fixed prompts in evidence. Document prompts for reproducibility.
+Generate samples using fixed temperature (e.g., 0.8) and top-p (e.g., 0.9).
+
+---
+
 **Boundaries**
 
 **Baseline Evaluation Mode (no experiments):**
@@ -266,18 +449,19 @@ I see two active experiments:
 Which experiment should I record evidence for?
 \`\`\`
 `,
-    license: 'MIT',
-    compatibility: 'Requires MLSpec v2 workspace',
-    metadata: { author: 'mlspec', version: '2.0' },
+    license: "MIT",
+    compatibility: "Requires MLSpec v2 workspace",
+    metadata: { author: "mlspec", version: "2.0" },
   };
 }
 
 export function getMlspecRunCommandTemplate(): CommandTemplate {
   return {
-    name: 'MLSpec: Run Evidence',
-    description: 'Run or record evidence for an experiment at smoke, validation, or final stage.',
-    category: 'Workflow',
-    tags: ['workflow', 'mlspec', 'ml', 'experiment', 'run', 'evidence'],
+    name: "MLSpec: Run Evidence",
+    description:
+      "Run or record evidence for an experiment at smoke, validation, or final stage.",
+    category: "Workflow",
+    tags: ["workflow", "mlspec", "ml", "experiment", "run", "evidence"],
     content: `Run or record evidence for an experiment.
 
 This skill records evidence at a specific stage (smoke/validation/final).

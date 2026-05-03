@@ -3,12 +3,13 @@
  *
  * Read-only router that recommends the next action.
  */
-import type { SkillTemplate, CommandTemplate } from '../types.js';
+import type { SkillTemplate, CommandTemplate } from "../types.js";
 
 export function getMlspecNextSkillTemplate(): SkillTemplate {
   return {
-    name: 'mlspec-next',
-    description: 'Read-only router that recommends the next action based on workspace state. Never modifies files.',
+    name: "mlspec-next",
+    description:
+      "Read-only router that recommends the next action based on workspace state. Never modifies files.",
     instructions: `Recommend the next action based on workspace state.
 
 This is a read-only skill that inspects the workspace and suggests what to do next. It never modifies any files.
@@ -28,12 +29,15 @@ If JSON command fails or output is unparseable: inspect files directly
 
 When using \`mlspec next --json\`, the output contains:
 - \`workspace_state\`: recipes_count, experiments_count, current_best_recipes, current_best_recipe
+- \`existing_stages\`: Object mapping experiment IDs to arrays of existing evidence stage names (e.g., \`{"exp-1": ["smoke", "validation"]}\`)
 - \`actions\`: Array of actions sorted by ascending priority, each with:
   - \`priority\`: Lower number = higher priority
   - \`action_type\`: one of explore, propose, run, resolve, bootstrap, none
   - \`suggested_command\`: The command to run
   - \`reason\`: Why this action is recommended
   - \`target\`: Optional { type: 'experiment' | 'recipe', id: string }
+
+**Important:** Do NOT recommend adding evidence for a stage that already exists. Check \`existing_stages\` before suggesting \`mlspec add-evidence <id> --stage <stage>\`.
 
 ---
 
@@ -107,10 +111,12 @@ When using \`mlspec next --json\`, the output contains:
 
 5. **Failed Abort** - Experiments where abort criteria are met
 6. **Ready to Resolve** - Experiments with complete evidence and recommendations
-7. **Need Validation** - Experiments with smoke evidence waiting for validation
+7. **Need Validation** - Experiments with smoke evidence waiting for validation (check existing_stages to avoid duplicate)
 8. **Need Smoke** - Experiments with no evidence yet
-9. **Ready for Final** - Experiments with validation complete
+9. **Ready for Final** - Experiments with validation complete (check existing_stages to avoid duplicate)
 10. **Explore** - If no clear next action
+
+**Duplicate Prevention:** When using JSON output, consult \`existing_stages\` to avoid recommending evidence for stages that already exist at \`mlspec/experiments/<id>/evidence/{smoke,validation,final}.md\`.
 
 ---
 
@@ -212,18 +218,19 @@ When using \`mlspec next --json\`, the output contains:
 
 It only reads and recommends.
 `,
-    license: 'MIT',
-    compatibility: 'Requires MLSpec v2 workspace',
-    metadata: { author: 'mlspec', version: '2.0' },
+    license: "MIT",
+    compatibility: "Requires MLSpec v2 workspace",
+    metadata: { author: "mlspec", version: "2.0" },
   };
 }
 
 export function getMlspecNextCommandTemplate(): CommandTemplate {
   return {
-    name: 'MLSpec: Next Action',
-    description: 'Read-only router that recommends the next action based on workspace state.',
-    category: 'Workflow',
-    tags: ['workflow', 'mlspec', 'ml', 'next', 'router'],
+    name: "MLSpec: Next Action",
+    description:
+      "Read-only router that recommends the next action based on workspace state.",
+    category: "Workflow",
+    tags: ["workflow", "mlspec", "ml", "next", "router"],
     content: `Recommend the next action based on workspace state.
 
 This is a read-only skill. It never modifies any files.
