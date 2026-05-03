@@ -1,6 +1,6 @@
 {
   "name": "mlspec",
-  "version": "2.1.2-dev.0",
+  "version": "2.1.2-dev.1",
   "description": "Agent-native ML experiment tracking and model evaluation framework for reproducible machine learning research",
   "keywords": "[\"mlspec\",\"machine-learning\",\"mlops\",\"experiment-tracking\",\"model-evaluation\",\"reproducibility\",\"ai-agents\",\"agentic\",\"experiments\",\"research\",\"cli\",\"opencode\"]",
   "homepage": "https://github.com/Kopamed/MLSpec",
