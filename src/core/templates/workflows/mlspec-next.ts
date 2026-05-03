@@ -54,15 +54,17 @@ When using \`mlspec next --json\`, the output contains:
 **1. Empty Workspace** (no recipes at all)
 -> Recommend /mlspec-explore
 
-**2. Baseline Exists But No Experiments**
+**2. Baseline Exists But Has No Metrics**
 
-   **2a. Baseline has no metrics**
-   -> Recommend /mlspec-run to establish baseline metrics
+   **Priority**: Baseline evaluation takes priority even if experiments already exist. Without baseline metrics, comparisons are weak or impossible.
 
-   **2b. Baseline has metrics**
+   -> Recommend /mlspec-run in baseline evaluation mode to establish baseline metrics first
+
+**3. Baseline Exists With Metrics**
+
    -> Recommend /mlspec-explore or /mlspec-propose for first experiment
 
-**3. Multiple Baseline Recipes**
+**4. Multiple Baseline Recipes**
    - If current-best is unambiguous: use it, continue with routing below
    - If ambiguous: ask one focused question to select which baseline
 
@@ -103,11 +105,11 @@ When using \`mlspec next --json\`, the output contains:
 **Bootstrap Routing (check first):**
 
 1. **Empty workspace** -> /mlspec-explore (no recipes exist yet)
-2. **Baseline exists, no metrics** -> /mlspec-run (establish baseline metrics first)
+2. **Baseline exists, no metrics** -> /mlspec-run in baseline evaluation mode (establish baseline metrics first; takes priority even if experiments exist because comparisons are weak without baseline)
 3. **Baseline exists with metrics, no experiments** -> /mlspec-explore or /mlspec-propose
 4. **Multiple baselines, ambiguous** -> ask one question to select
 
-**Normal Routing (experiments exist):**
+**Normal Routing (baseline has metrics, experiments may exist):**
 
 5. **Failed Abort** - Experiments where abort criteria are met
 6. **Ready to Resolve** - Experiments with complete evidence and recommendations
@@ -115,6 +117,10 @@ When using \`mlspec next --json\`, the output contains:
 8. **Need Smoke** - Experiments with no evidence yet
 9. **Ready for Final** - Experiments with validation complete (check existing_stages to avoid duplicate)
 10. **Explore** - If no clear next action
+
+**Key Distinction:**
+- **Evaluation work** (establishes baseline metrics): Updates \`mlspec/recipes/<id>/recipe.yaml\` top-level \`metrics\` field. This is NOT experiment evidence.
+- **Experiment work** (tests hypotheses): Creates \`mlspec/experiments/<id>/evidence/<stage>.md\` files.
 
 **Duplicate Prevention:** When using JSON output, consult \`existing_stages\` to avoid recommending evidence for stages that already exist at \`mlspec/experiments/<id>/evidence/{smoke,validation,final}.md\`.
 
@@ -149,13 +155,12 @@ When using \`mlspec next --json\`, the output contains:
 
 ### Why This Action?
 - Baseline recipe exists but has no metrics
-- Baseline metrics should be established before proposing experiments
-- Running evaluation will populate recipe.yaml metrics
+- Baseline evaluation takes priority even if experiments exist: without baseline metrics, comparisons are weak or impossible
+- Evaluation work (establishes baseline) is distinct from experiment work (tests hypotheses)
 
 ### Context
 - **Baseline**: <baseline-id> (no metrics yet)
-- **Experiments**: none
-- **Status**: Baseline metrics need to be established
+- **Status**: Baseline metrics need to be established via evaluation
 
 ### Alternative Actions
 1. /mlspec-explore - to understand the project structure first

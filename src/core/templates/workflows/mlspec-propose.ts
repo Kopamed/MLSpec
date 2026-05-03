@@ -95,7 +95,9 @@ If no recipes exist, enter **bootstrap mode** and create a root baseline recipe 
 
    ### Next Steps
    1. Implement baseline approach if not yet implemented
-   2. Run /mlspec-run to establish baseline metrics
+   2. Run /mlspec-run in baseline evaluation mode to establish baseline metrics
+
+   **Important**: Baseline establishment is evaluation work that updates \`mlspec/recipes/<id>/recipe.yaml\` metrics. It is NOT experiment evidence work.
 
    Next: /mlspec-run
    \`\`\`

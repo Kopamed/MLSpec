@@ -23,13 +23,15 @@ This skill records evidence for an experiment at a specific stage. It infers the
 
 ---
 
-## Baseline Evaluation Mode
+## BASELINE EVALUATION MODE (EVALUATION WORK, NOT EXPERIMENT EVIDENCE)
+
+**IMPORTANT**: Baseline establishment is EVALUATION work that updates \`mlspec/recipes/<id>/recipe.yaml\` top-level \`metrics\` field. It is NOT experiment evidence work. Do NOT create evidence files for baseline evaluation.
 
 **FIRST**: Check if experiments exist in \`mlspec/experiments/\`.
 
 If no experiments exist but baseline recipe(s) exist, enter **baseline evaluation mode**:
 
-### Baseline Evaluation Steps
+### Baseline Evaluation Steps (Evaluation Work)
 
 1. **Identify Baseline Recipe**
    - Find recipe with current-best tag
@@ -78,7 +80,9 @@ If no experiments exist but baseline recipe(s) exist, enter **baseline evaluatio
 
 ---
 
-## Normal Mode: Experiment Evidence
+## EXPERIMENT EVIDENCE MODE (EXPERIMENT WORK)
+
+**IMPORTANT**: This mode creates evidence files at \`mlspec/experiments/<id>/evidence/<stage>.md\`. This is experiment work, not baseline evaluation.
 
 (When experiments exist, proceed with normal evidence recording below)
 
@@ -241,6 +245,8 @@ Before recording evidence for full training runs (not smoke), ensure dataset pro
 
 ### Dataset Profiling Checklist
 
+Before full training runs, estimate the compute/data budget and verify it is appropriate for the model and task.
+
 In the evidence Markdown body, include a section like:
 
 \`\`\`markdown
@@ -256,6 +262,18 @@ In the evidence Markdown body, include a section like:
 - avg_raw_tokens_per_example: <average tokens per raw example>
 - tokens_per_epoch: <estimated tokens per epoch>
 - planned_training_tokens: <tokens_per_epoch * num_epochs>
+
+### Compute/Data Budget Estimate
+
+Before running full training, estimate and document:
+
+- **Estimated data units**: <count of rows, sequences, or tokens>
+- **Effective batch size**: <actual batch size considering gradient accumulation>
+- **Planned training units**: <steps, epochs, or tokens>
+- **Estimated runtime**: <wall-clock time estimate>
+- **Is this scale appropriate for the model and task?**: <yes/no with reasoning>
+
+If the scale seems inappropriate (e.g., too many epochs for the dataset size, or insufficient data for the model size), flag this before proceeding.
 
 ### Dataset Efficiency Metrics
 
@@ -313,6 +331,23 @@ For evidence body, include training ladder checklist:
 \`\`\`
 
 Full-run evidence requires earlier ladder stages to be completed.
+
+---
+
+## Run-Readiness: Durable Execution
+
+For nontrivial or repeated commands, prefer durable scripts and configs over inline snippets:
+
+- **Use scripts**: \`scripts/train.py\`, \`scripts/evaluate.py\`, \`scripts/preprocess.py\`
+- **Use configs**: \`configs/config.yaml\`, \`configs/training.yaml\` instead of hardcoded values
+- **Reusable preprocessing**: Save preprocessing scripts for reuse across runs
+
+**Principle**: If the command is nontrivial or will be repeated, make it a script. Inline snippets are acceptable only for quick exploration.
+
+**Artifact Lifecycle**:
+- **Durable project artifacts** (version-controlled): Reusable scripts, configs, preprocessing code, tokenizer definitions. Store outside \`mlspec/\`.
+- **Runtime artifacts** (NOT version-controlled): \`outputs/<run-id>/logs\`, \`outputs/<run-id>/cache\`, \`outputs/<run-id>/checkpoints\`.
+- **MLSpec artifacts**: \`mlspec/recipes/\` (metrics), \`mlspec/experiments/<id>/evidence/\` (evidence), \`mlspec/findings/\` (findings/resolutions).
 
 ---
 
@@ -381,12 +416,14 @@ With investigation note, evidence MAY be recorded with \`sanity_override: true\`
 
 ---
 
-## Generation-Collapse Metrics
+## Task-Appropriate Evaluation Checks
 
-Evidence Markdown body SHALL include:
+Evidence MUST include task-appropriate sanity/quality checks beyond a single scalar metric.
+
+### Generative Tasks (e.g., language modeling, image generation)
 
 \`\`\`markdown
-## Generation Collapse Metrics
+## Task Evaluation: Generative
 
 - repetition_rate: <ratio of repeated n-grams>
 - distinct_1: <ratio of unique unigrams to total tokens>
@@ -397,23 +434,48 @@ Evidence Markdown body SHALL include:
 - top_token_frequency: <frequency of most common token>
 \`\`\`
 
-### Warning Thresholds
-
+**Warning Thresholds**:
 - repetition_rate > 0.3: "High repetition detected"
 - distinct_1 < 0.3: "Low vocabulary diversity"
 - max_token_run > 10: "Long repeated token run detected"
 
-### Collapse Threshold
-
-If repetition_rate > 0.7 OR distinct_1 < 0.1 OR max_token_run > 50:
+**Collapse Threshold**: If repetition_rate > 0.7 OR distinct_1 < 0.1 OR max_token_run > 50:
 > "Generation collapse detected"
 
 The skill SHALL stop and require an investigation note before writing/accepting evidence.
 
-### Fixed-Prompt Samples
+**Samples**: Include samples from 3-5 fixed prompts. Document prompts for reproducibility.
 
-Include samples from 3-5 fixed prompts in evidence. Document prompts for reproducibility.
-Generate samples using fixed temperature (e.g., 0.8) and top-p (e.g., 0.9).
+### Classification Tasks
+
+\`\`\`markdown
+## Task Evaluation: Classification
+
+- per_class_metrics: <accuracy/f1 per class>
+- confusion_matrix_summary: <key error patterns>
+- class_balanced_accuracy: <if classes are imbalanced>
+\`\`\`
+
+### Ranking Tasks
+
+\`\`\`markdown
+## Task Evaluation: Ranking
+
+- ndcg: <normalized discounted cumulative gain>
+- mrr: <mean reciprocal rank>
+- precision_at_k: <precision at k>
+\`\`\`
+
+### Detection Tasks
+
+\`\`\`markdown
+## Task Evaluation: Detection
+
+- map: <mean average precision>
+- error_analysis: <common failure modes by category>
+\`\`\`
+
+**Principle**: Evidence must include task-appropriate sanity/quality checks. Do not rely on a single scalar metric.
 
 ---
 
