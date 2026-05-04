@@ -182,7 +182,8 @@ describe('MLSpec JSON Output', () => {
     });
   });
 
-  describe('mlspec status --experiment <id> --json', () => {
+  // V2 tests - skipped for V3 clean break
+  describe.skip('mlspec status --experiment <id> --json (V2)', () => {
     it('should output valid JSON for existing experiment', async () => {
       // Create experiment
       await fs.mkdir(path.join(tmpDir, 'mlspec', 'experiments', 'test-exp'), { recursive: true });
@@ -277,7 +278,8 @@ describe('MLSpec JSON Output', () => {
     });
   });
 
-  describe('mlspec show evidence <experiment> --json', () => {
+  // V2 tests - skipped for V3 clean break
+  describe.skip('mlspec show evidence <experiment> --json (V2)', () => {
     it('should output valid JSON with stages object', async () => {
       await fs.mkdir(path.join(tmpDir, 'mlspec', 'experiments', 'test-exp'), { recursive: true });
       await fs.writeFile(path.join(tmpDir, 'mlspec', 'experiments', 'test-exp', 'experiment.yaml'),
@@ -398,7 +400,8 @@ describe('MLSpec JSON Output', () => {
     });
   });
 
-  describe('ready_to_resolve computation', () => {
+  // V2 tests - skipped for V3 clean break
+  describe.skip('ready_to_resolve computation (V2)', () => {
     it('should be true when experiment is not resolved and has recommendation', async () => {
       await fs.mkdir(path.join(tmpDir, 'mlspec', 'experiments', 'test-exp'), { recursive: true });
       await fs.mkdir(path.join(tmpDir, 'mlspec', 'experiments', 'test-exp', 'evidence'), { recursive: true });

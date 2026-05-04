@@ -30,20 +30,22 @@ vi.mock('../../src/utils/interactive.js', () => ({
 
 describe('MLSpec CLI registration', () => {
   describe('registerMlspecCommands (for standalone mlspec binary)', () => {
-    it('should register init, update, status, validate, new, add-evidence as top-level commands', () => {
+    it('should register init, update, status, validate, new, prepare, run, resolve as top-level commands', () => {
       const program = new Command();
       registerMlspecCommands(program);
 
       const commandNames = program.commands.map(c => c.name());
 
-      // These are the expected top-level commands in V2
+      // These are the expected top-level commands in V3
       expect(commandNames).toContain('init');
       expect(commandNames).toContain('update');
       expect(commandNames).toContain('status');
       expect(commandNames).toContain('validate');
       expect(commandNames).toContain('new');
-      expect(commandNames).toContain('add-evidence');
-      // V2 no longer has decide, promote, archive as top-level commands
+      expect(commandNames).toContain('prepare');
+      expect(commandNames).toContain('run');
+      expect(commandNames).toContain('resolve');
+      // V3 no longer has add-evidence, accept, reject, retry, hold, inconclusive
     });
 
     it('should NOT register an "ml" subcommand as the only command', () => {
@@ -101,8 +103,8 @@ describe('MLSpec CLI registration', () => {
 });
 
 describe('MLSPEC_WORKFLOWS', () => {
-  it('should have 5 MLSpec workflows', () => {
-    expect(MLSPEC_WORKFLOWS).toHaveLength(5);
+  it('should have 6 MLSpec workflows', () => {
+    expect(MLSPEC_WORKFLOWS).toHaveLength(6);
   });
 
   it('should contain mlspec-* workflows only', () => {
@@ -115,6 +117,7 @@ describe('MLSPEC_WORKFLOWS', () => {
     const expected = [
       'mlspec-explore',
       'mlspec-propose',
+      'mlspec-prepare',
       'mlspec-run',
       'mlspec-resolve',
       'mlspec-next',
@@ -179,7 +182,7 @@ describe('MlspecInitCommand', () => {
       expect(await fileExists(evaluationPath)).toBe(true);
 
       const content = await fs.readFile(evaluationPath, 'utf-8');
-      expect(content).toContain('MLSpec V2 Evaluation');
+      expect(content).toContain('MLSpec V3 Evaluation');
     });
 
     it('should create mlspec/AGENTS.md', async () => {
@@ -190,7 +193,7 @@ describe('MlspecInitCommand', () => {
       expect(await fileExists(agentsPath)).toBe(true);
 
       const content = await fs.readFile(agentsPath, 'utf-8');
-      expect(content).toContain('MLSpec V2 Agent Experiment Protocol');
+      expect(content).toContain('MLSpec V3 Agent Experiment Protocol');
     });
 
     it('should create mlspec/.workspace.yaml', async () => {

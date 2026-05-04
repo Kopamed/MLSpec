@@ -1,17 +1,20 @@
 /**
- * MLSpec CLI Command Registration (V2)
+ * MLSpec CLI Command Registration (V3)
  *
  * Provides two registration functions:
  * - registerMlspecCommands(program): Registers commands directly on program (for standalone mlspec binary)
  * - registerMlspecSubcommand(program): Registers 'ml' subcommand (for openspec ml compatibility)
  *
- * V2 Commands:
+ * V3 Commands:
  * - Recipe: new recipe, tag, untag, list recipes, show recipe, diff
  * - Experiment: new experiment (--from, --proposes required), set-status
- * - Evidence: add-evidence (--stage), show evidence
- * - Resolution: accept, reject, retry, hold, inconclusive
- * - Graph: graph, lineage, next
- * - Validation: validate (V2 structure)
+ * - Evidence: show evidence (read-only)
+ * - Validation: validate (V3 protocol/prepare/rung-based structure)
+ * - prepare: validates prepare.md artifact
+ * - run: preflight gate checker for rung evidence
+ * - resolve: preflight gate checker for experiment resolution
+ *
+ * V3 Workflow: propose → prepare → run (evidence ladder) → resolve
  */
 
 import { Command } from "commander";
@@ -28,17 +31,19 @@ import {
   RecipeMetadataSchema,
   ExperimentMetadataSchema,
   ExperimentStatusSchema,
-  EvidenceFrontmatterSchema,
   ResolutionFrontmatterSchema,
-  EvidenceStageSchema,
   ResolutionTypeSchema,
   RecipeTagSchema,
+  ProtocolMetadataSchema,
+  PrepareMetadataSchema,
+  RungEvidenceSchema,
   type RecipeMetadata,
   type ExperimentMetadata,
-  type EvidenceFrontmatter,
-  type ResolutionFrontmatter,
-  type EvidenceStage,
   type RecipeTag,
+  type ProtocolMetadata,
+  type PrepareMetadata,
+  type RungEvidence,
+  type ResolutionFrontmatter,
 } from "../entity-types.js";
 import {
   experimentExists,
@@ -49,6 +54,12 @@ import {
   listRecipes,
   listRecipeTags,
   loadAllRecipes,
+  protocolExists,
+  prepareExists,
+  loadProtocolMetadata,
+  loadPrepareMetadata,
+  getEvidenceLadder,
+  getRungEvidencePath,
 } from "../reference-resolver.js";
 import { parse as parseYaml, stringify } from "yaml";
 import ora from "ora";
@@ -186,7 +197,7 @@ export function registerMlspecCommands(program: Command): void {
 
         const metadata: Record<string, unknown> = {
           entity_type: "recipe",
-          schema: "ml-experiment-v2",
+          schema: "ml-experiment-v3",
           id,
           name: id,
           tags,
@@ -681,10 +692,6 @@ _Created: ${getCurrentDate()}_
     )
     .option("--success <criteria...>", "Success criteria for acceptance")
     .option("--abort <criteria...>", "Abort criteria for early termination")
-    .option(
-      "--plan <stages...>",
-      "Evidence plan stages (smoke, validation, final)"
-    )
     .action(
       async (
         id: string,
@@ -695,7 +702,6 @@ _Created: ${getCurrentDate()}_
           controlled?: string[];
           success?: string[];
           abort?: string[];
-          plan?: string[];
         }
       ) => {
         try {
@@ -764,7 +770,7 @@ _Created: ${getCurrentDate()}_
 
           const metadata: Record<string, unknown> = {
             entity_type: "experiment",
-            schema: "ml-experiment-v2",
+            schema: "ml-experiment-v3",
             id,
             status: "draft",
             base_recipe: options.from,
@@ -774,7 +780,6 @@ _Created: ${getCurrentDate()}_
             controlled_variables: options.controlled || [],
             success_criteria: options.success || [],
             abort_criteria: options.abort || [],
-            evidence_plan: options.plan || ["smoke", "validation", "final"],
             created: getCurrentDate(),
           };
 
@@ -820,15 +825,6 @@ ${
 }
 - Metric delta < -0.010
 
-## Evidence Plan
-
-${(options.plan || ["smoke", "validation", "final"])
-  .map(
-    (s: string) =>
-      `- [ ] ${s.charAt(0).toUpperCase() + s.slice(1)}: _description_`
-  )
-  .join("\n")}
-
 ## Expected Output Location
 
 \`\`\`
@@ -846,7 +842,10 @@ outputs/${id}/
             )} to refine your hypothesis`
           );
           console.log(
-            `2. Add evidence with 'mlspec add-evidence ${id} --stage <smoke|validation|final>'`
+            `2. Run 'mlspec prepare ${id}' to prepare experiment`
+          );
+          console.log(
+            `3. Run 'mlspec run ${id} <rung>' to check gate, then use /mlspec-run skill to collect evidence`
           );
         } catch (error) {
           ora().fail(`Error: ${(error as Error).message}`);
@@ -913,153 +912,9 @@ outputs/${id}/
     });
 
   // ==========================================================================
-  // Evidence Commands (2.3)
+  // Evidence Commands (V3 - rung-based)
   // ==========================================================================
 
-  // ml add-evidence <experiment> --stage <stage> [--metrics <json>] [--seed <number>]
-  program
-    .command("add-evidence <experiment>")
-    .description("Add evidence to an experiment")
-    .requiredOption(
-      "--stage <stage>",
-      "Evidence stage (smoke, validation, final)"
-    )
-    .option(
-      "--metrics <json>",
-      "JSON object of metric values (e.g., '{\"accuracy\":0.85}')"
-    )
-    .option("--seed <number>", "Random seed used for reproducibility")
-    .action(
-      async (
-        experiment: string,
-        options: { stage: string; metrics?: string; seed?: string }
-      ) => {
-        try {
-          const projectPath = process.cwd();
-
-          if (!mlspecWorkspaceExists(projectPath)) {
-            ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
-            process.exit(1);
-          }
-
-          if (!experimentExists(projectPath, experiment)) {
-            ora().fail(`Experiment '${experiment}' not found`);
-            process.exit(1);
-          }
-
-          const stageResult = EvidenceStageSchema.safeParse(options.stage);
-          if (!stageResult.success) {
-            ora().fail(
-              `Invalid evidence stage. Must be one of: ${EvidenceStageSchema.options.join(
-                ", "
-              )}`
-            );
-            process.exit(1);
-          }
-          const stage = stageResult.data;
-
-          const experimentDir = resolveMlspecPath(
-            projectPath,
-            "experiments",
-            experiment
-          );
-          const evidenceDir = path.join(experimentDir, "evidence");
-          const evidencePath = path.join(evidenceDir, `${stage}.md`);
-
-          if (fs.existsSync(evidencePath)) {
-            ora().fail(
-              `Evidence at stage '${stage}' already exists for experiment '${experiment}'`
-            );
-            process.exit(1);
-          }
-
-          await fsp.mkdir(evidenceDir, { recursive: true });
-
-          const expMeta = loadExperimentMetadata(projectPath, experiment);
-          const baseRecipe = expMeta?.base_recipe || "unknown";
-          const proposedRecipe = expMeta?.proposed_recipe || "unknown";
-
-          // Build runs array based on provided options
-          const runs: Record<string, unknown>[] = [];
-          if (options.metrics || options.seed) {
-            const run: Record<string, unknown> = {
-              seed: options.seed ? parseInt(options.seed, 10) : undefined,
-              command: "_Command used to generate this run_",
-              completed: getCurrentDate(),
-              duration_minutes: undefined,
-              metrics: {},
-            };
-
-            // Parse metrics if provided
-            if (options.metrics) {
-              try {
-                run.metrics = JSON.parse(options.metrics);
-              } catch {
-                ora().warn("Invalid --metrics JSON, ignoring");
-              }
-            }
-
-            runs.push(run);
-          }
-
-          // Compute aggregate from runs
-          const aggregate: Record<
-            string,
-            { mean: number | null; std: number | null }
-          > = {};
-          if (runs.length > 0) {
-            for (const run of runs) {
-              if (run.metrics && typeof run.metrics === "object") {
-                for (const [key, value] of Object.entries(run.metrics)) {
-                  if (typeof value === "number") {
-                    if (!aggregate[key]) {
-                      aggregate[key] = { mean: null, std: null };
-                    }
-                    // For single run: mean = value, std = null
-                    // For multi-run: mean = average, std = stddev
-                    aggregate[key].mean = value;
-                  }
-                }
-              }
-            }
-          }
-
-          const frontmatter: Record<string, unknown> = {
-            entity_type: "evidence",
-            experiment_id: experiment,
-            stage,
-            runs,
-            aggregate,
-            summary: "",
-            recommendation: "none",
-            created: getCurrentDate(),
-          };
-
-          await fsp.writeFile(
-            evidencePath,
-            `---\n${stringify(
-              frontmatter
-            )}---\n\n# Evidence: ${experiment} (${stage})\n\n## What Was Done\n\n_Describe the experiment setup and what was executed._\n\n## Training Ladder\n\n- [ ] smoke-import: completed (N steps)\n- [ ] smoke-onebatch: completed (N steps)\n- [ ] smoke-tinyoverfit: completed (N steps, overfit_loss=X)\n- [ ] checkpoint-short: completed (path: ...)\n- [ ] resume-checkpoint: completed\n- [ ] full-run: completed (max_steps=N, max_tokens=N)\n\n## Dataset Profile\n\n- raw_examples: <count>\n- raw_token_count: <count>\n- generated_sequences: <count after tokenization/chunking>\n- generated_tokens: <count>\n- seq_len: <e.g., 256, 512, 1024>\n- chunking_strategy: <e.g., first, random, sliding-window>\n- packing_strategy: <e.g., none, greedy, sorted>\n- avg_raw_tokens_per_example: <average tokens per raw example>\n- tokens_per_epoch: <estimated tokens per epoch>\n- planned_training_tokens: <tokens_per_epoch * num_epochs>\n\n### Dataset Efficiency Metrics\n\n- generated_tokens / raw_token_count: <retention ratio>\n- dropped_token_ratio: <tokens lost to chunking/packing>\n- padding_ratio: <fraction of sequence that is padding>\n- avg_tokens_per_sequence: <generated_tokens / generated_sequences>\n- sequence_utilization: <avg_tokens_per_sequence / seq_len>\n\n## Target Leakage Check\n\n- autoregressive_shift_verified: <true/false>\n- verification_method: <code review / unit test / not_applicable>\n- loss_sanity_note: <explanation if loss is suspiciously low>\n\n## Task-Appropriate Evaluation Checks\n\nInclude checks appropriate to the task type:\n\n**Generative tasks**: repetition_rate, distinct_1, distinct_2, max_token_run\n**Classification**: per_class_metrics, confusion_matrix_summary, class_balanced_accuracy\n**Ranking**: ndcg, mrr, precision_at_k\n**Detection**: map, error_analysis\n\n## Preprocessing Cache\n\n- cache_key: <hash-of-data-and-preprocessing>\n- cache_valid: <true/false>\n- data_hash: <hex-string>\n- preprocessing_version: <version-string>\n- cache_location: outputs/<experiment-id>/cache/\n\n## Fixed-Prompt Samples\n\n_Prompt 1_: <prompt text>\n_Sample 1_: <generated text>\n\n_Prompt 2_: <prompt text>\n_Sample 2_: <generated text>\n\n## Changed Files\n\n_List the files actually modified for this experiment:_\n- \`file1.py\`: Description of change\n- \`file2.yaml\`: Description of change\n\n## Run Results\n\n### Run 1\n\n| Metric | ${baseRecipe} | ${proposedRecipe} | Delta |\n|--------|---------------|-------------------|-------|\n| <metric> | <base_value> | <proposed_value> | <delta> |\n\n### Aggregate\n\n| Metric | Mean Delta | Std |\n|--------|-----------|-----|\n| <metric> | <mean_delta> | <std> |\n\n## Interpretation\n\n_What do these results mean? Is there a signal?\nConsider: metric delta, seed/fold stability, per-class regressions, compute tradeoff._\n\n## Recommendation\n\n- [ ] **continue**: Run the next evidence stage\n- [ ] **accept**: Resolve experiment as accepted\n- [ ] **reject**: Resolve experiment as rejected\n- [ ] **retry**: Re-run with modifications\n- [ ] **hold**: Pause for later\n- [ ] **inconclusive**: Evidence is not strong enough\n`
-          );
-
-          // Set experiment status to running when first evidence is added
-          if (expMeta && expMeta.status === "draft") {
-            expMeta.status = "running";
-            await fsp.writeFile(
-              path.join(experimentDir, "experiment.yaml"),
-              `# Experiment: ${experiment}\n\n${stringify(expMeta)}`
-            );
-          }
-
-          ora().succeed(
-            `Created ${stage} evidence for experiment '${experiment}'`
-          );
-        } catch (error) {
-          ora().fail(`Error: ${(error as Error).message}`);
-          process.exit(1);
-        }
-      }
-    );
 
   // ml show evidence <experiment>
   showCmd
@@ -1110,26 +965,27 @@ outputs/${id}/
           "experiments",
           experiment
         );
-        const stages: Record<
+
+        // V3: Load evidence ladder from protocol.md
+        const ladder = getEvidenceLadder(projectPath, experiment);
+        const rungs: Record<
           string,
           {
             exists: boolean;
             path: string | null;
-            runs: unknown[] | null;
-            aggregate: Record<
-              string,
-              { mean: number | null; std: number | null }
-            > | null;
-            summary: string | null;
-            recommendation: string | null;
+            rung_id: string | null;
+            baseline_runs: unknown[] | null;
+            treatment_runs: unknown[] | null;
+            aggregate: unknown | null;
+            comparison: unknown | null;
           }
         > = {};
 
-        for (const stage of EvidenceStageSchema.options) {
+        for (const rung of ladder) {
           const evidencePath = path.join(
             experimentDir,
             "evidence",
-            `${stage}.md`
+            `${rung.id}.md`
           );
           if (fs.existsSync(evidencePath)) {
             try {
@@ -1138,49 +994,53 @@ outputs/${id}/
               if (frontmatterMatch) {
                 const parsed = parseYaml(
                   frontmatterMatch[1]
-                ) as EvidenceFrontmatter;
-                stages[stage] = {
+                ) as RungEvidence;
+                rungs[rung.id] = {
                   exists: true,
                   path: evidencePath,
-                  runs: parsed.runs || null,
+                  rung_id: rung.id,
+                  baseline_runs: parsed.baseline_arm?.runs || null,
+                  treatment_runs: parsed.treatment_arm?.runs || null,
                   aggregate: parsed.aggregate || null,
-                  summary: parsed.summary || null,
-                  recommendation: parsed.recommendation || null,
+                  comparison: parsed.comparison || null,
                 };
               } else {
-                stages[stage] = {
+                rungs[rung.id] = {
                   exists: true,
                   path: evidencePath,
-                  runs: null,
+                  rung_id: rung.id,
+                  baseline_runs: null,
+                  treatment_runs: null,
                   aggregate: null,
-                  summary: null,
-                  recommendation: null,
+                  comparison: null,
                 };
               }
             } catch {
-              stages[stage] = {
+              rungs[rung.id] = {
                 exists: true,
                 path: evidencePath,
-                runs: null,
+                rung_id: rung.id,
+                baseline_runs: null,
+                treatment_runs: null,
                 aggregate: null,
-                summary: null,
-                recommendation: null,
+                comparison: null,
               };
             }
           } else {
-            stages[stage] = {
+            rungs[rung.id] = {
               exists: false,
               path: null,
-              runs: null,
+              rung_id: rung.id,
+              baseline_runs: null,
+              treatment_runs: null,
               aggregate: null,
-              summary: null,
-              recommendation: null,
+              comparison: null,
             };
           }
         }
 
         if (options.json) {
-          const output = { experiment_id: experiment, stages };
+          const output = { experiment_id: experiment, rungs };
           console.log(JSON.stringify(output, null, 2));
           return;
         }
@@ -1189,18 +1049,19 @@ outputs/${id}/
         console.log(`\n# Evidence: ${experiment}\n`);
 
         let hasEvidence = false;
-        for (const stage of EvidenceStageSchema.options) {
-          if (stages[stage].exists) {
+        for (const rung of ladder) {
+          const rungData = rungs[rung.id];
+          if (rungData.exists) {
             hasEvidence = true;
-            console.log(`## ${stage.charAt(0).toUpperCase() + stage.slice(1)}`);
+            console.log(`## ${rung.id} (${rung.purpose})`);
             console.log(
-              `  - Runs: ${(stages[stage].runs as unknown[])?.length || 0}`
+              `  - Baseline runs: ${(rungData.baseline_runs as unknown[])?.length || 0}`
             );
             console.log(
-              `  - Recommendation: ${stages[stage].recommendation || "none"}`
+              `  - Treatment runs: ${(rungData.treatment_runs as unknown[])?.length || 0}`
             );
-            if (stages[stage].summary) {
-              console.log(`  - Summary: ${stages[stage].summary}`);
+            if (rungData.comparison) {
+              console.log(`  - Comparison: present`);
             }
           }
         }
@@ -1217,541 +1078,6 @@ outputs/${id}/
           );
           process.exit(1);
         }
-        ora().fail(`Error: ${(error as Error).message}`);
-        process.exit(1);
-      }
-    });
-
-  // ==========================================================================
-  // Resolution Commands (2.4)
-  // ==========================================================================
-
-  // ml accept <experiment> --as <recipe> [--config <file>] [--tag <tag>]
-  program
-    .command("accept <experiment>")
-    .description("Accept an experiment and create a recipe")
-    .requiredOption("--as <recipe>", "Recipe ID to create")
-    .option(
-      "--config <file>",
-      "Config file to use for the accepted recipe (copies base_recipe config if omitted)"
-    )
-    .option(
-      "--tag <tag>",
-      "Tag for the new recipe (default: candidate)",
-      "candidate"
-    )
-    .action(
-      async (
-        experiment: string,
-        options: { as: string; config?: string; tag?: string }
-      ) => {
-        try {
-          const projectPath = process.cwd();
-          const spinner = ora("Accepting experiment...").start();
-
-          if (!mlspecWorkspaceExists(projectPath)) {
-            ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
-            process.exit(1);
-          }
-
-          if (!experimentExists(projectPath, experiment)) {
-            ora().fail(`Experiment '${experiment}' not found`);
-            process.exit(1);
-          }
-
-          const recipeId = options.as;
-          if (!isValidEntityName(recipeId)) {
-            ora().fail(
-              "Invalid recipe ID. Use only alphanumeric characters, dashes, and underscores."
-            );
-            process.exit(1);
-          }
-
-          const recipeDir = resolveMlspecPath(projectPath, "recipes", recipeId);
-          if (fs.existsSync(recipeDir)) {
-            ora().fail(`Recipe '${recipeId}' already exists`);
-            process.exit(1);
-          }
-
-          const tagResult = RecipeTagSchema.safeParse(
-            options.tag || "candidate"
-          );
-          if (!tagResult.success) {
-            ora().fail(
-              `Invalid tag '${
-                options.tag
-              }'. Must be one of: ${RecipeTagSchema.options.join(", ")}`
-            );
-            process.exit(1);
-          }
-
-          const expMeta = loadExperimentMetadata(projectPath, experiment);
-          if (!expMeta) {
-            ora().fail(
-              `Failed to load experiment metadata for '${experiment}'`
-            );
-            process.exit(1);
-          }
-
-          // Check for evidence gaps - warn if evidence plan stages are missing
-          const evidenceDir = resolveMlspecPath(
-            projectPath,
-            "experiments",
-            experiment,
-            "evidence"
-          );
-          const evidencePlan = expMeta.evidence_plan || [];
-          const missingStages: string[] = [];
-
-          for (const stage of evidencePlan) {
-            const stagePath = path.join(evidenceDir, `${stage}.md`);
-            if (!fs.existsSync(stagePath)) {
-              missingStages.push(stage);
-            }
-          }
-
-          // Prevent re-resolving already resolved experiments
-          if (expMeta.status === "resolved") {
-            ora().fail(
-              `Experiment '${experiment}' is already resolved. Use 'mlspec retry' to re-run a resolved experiment.`
-            );
-            process.exit(1);
-          }
-
-          // Create recipe directory and recipe.yaml
-          await fsp.mkdir(recipeDir, { recursive: true });
-
-          // Determine config: use --config file, or copy from base_recipe with TODO marker
-          let recipeConfig: Record<string, unknown> = {};
-          let configSource = "";
-
-          if (options.config) {
-            // User provided config file - use it directly
-            const configPath = path.resolve(options.config);
-            if (!fs.existsSync(configPath)) {
-              ora().fail(`Config file '${options.config}' not found`);
-              process.exit(1);
-            }
-            try {
-              const configContent = fs.readFileSync(configPath, "utf-8");
-              const parsed = parseYaml(configContent);
-              recipeConfig = parsed as Record<string, unknown>;
-              configSource = ` (copied from ${options.config})`;
-            } catch (error) {
-              ora().fail(
-                `Failed to parse config file: ${(error as Error).message}`
-              );
-              process.exit(1);
-            }
-          } else {
-            // No config provided - copy from base_recipe and add TODO marker
-            const baseRecipePath = resolveMlspecPath(
-              projectPath,
-              "recipes",
-              expMeta.base_recipe,
-              "recipe.yaml"
-            );
-            if (fs.existsSync(baseRecipePath)) {
-              try {
-                const baseContent = fs.readFileSync(baseRecipePath, "utf-8");
-                const baseParsed = parseYaml(baseContent) as Record<
-                  string,
-                  unknown
-                >;
-                recipeConfig = {
-                  ...(baseParsed.config || {}),
-                  // TODO marker - this config was copied from base and needs review
-                  _TODO_review_required: `This config was copied from ${
-                    expMeta.base_recipe
-                  }. Update it to match the proposed_change: "${
-                    expMeta.proposed_change || "unknown"
-                  }"`,
-                };
-                configSource = ` (copied from ${expMeta.base_recipe} with TODO - must review)`;
-              } catch {
-                // Fallback to empty config if base recipe can't be read
-                recipeConfig = {
-                  _TODO_review_required: `Config must be created to match proposed_change: "${
-                    expMeta.proposed_change || "unknown"
-                  }"`,
-                };
-                configSource = " (TODO - must create config)";
-              }
-            } else {
-              recipeConfig = {
-                _TODO_review_required: `Config must be created to match proposed_change: "${
-                  expMeta.proposed_change || "unknown"
-                }"`,
-              };
-              configSource = " (TODO - must create config)";
-            }
-          }
-
-          const recipeFrontmatter = {
-            entity_type: "recipe",
-            schema: "ml-experiment-v2",
-            id: recipeId,
-            name: recipeId,
-            tags: [tagResult.data],
-            parent_recipe: expMeta.base_recipe,
-            created_by_experiment: experiment,
-            config: recipeConfig,
-            created: getCurrentDate(),
-          };
-          await fsp.writeFile(
-            path.join(recipeDir, "recipe.yaml"),
-            `# Recipe: ${recipeId}\n\n${stringify(recipeFrontmatter)}`
-          );
-
-          // Create summary.md
-          await fsp.writeFile(
-            path.join(recipeDir, "summary.md"),
-            `# Recipe: ${recipeId}\n\n## Overview\n\n- **Parent**: ${expMeta.base_recipe}\n- **Created from**: ${experiment}\n\n## Summary\n\n_Describe this recipe's purpose and key characteristics._\n`
-          );
-
-          // Set experiment status to resolved
-          const experimentPath = resolveMlspecPath(
-            projectPath,
-            "experiments",
-            experiment,
-            "experiment.yaml"
-          );
-          expMeta.status = "resolved";
-          await fsp.writeFile(
-            experimentPath,
-            `# Experiment: ${experiment}\n\n${stringify(expMeta)}`
-          );
-
-          // Create resolution.md
-          const resolutionPath = resolveMlspecPath(
-            projectPath,
-            "experiments",
-            experiment,
-            "resolution.md"
-          );
-          const resolutionFrontmatter: Record<string, unknown> = {
-            entity_type: "resolution",
-            experiment_id: experiment,
-            resolution: "accept",
-            accepted_recipe: recipeId,
-            accepted_tags: [tagResult.data],
-            rationale: "_Explain why this experiment was accepted_",
-            created: getCurrentDate(),
-          };
-
-          await fsp.writeFile(
-            resolutionPath,
-            `---\n${stringify(
-              resolutionFrontmatter
-            )}---\n\n# Resolution: ${experiment}\n\n## Decision: Accept\n\n**Created Recipe**: ${recipeId}\n**Tags**: ${
-              tagResult.data
-            }\n\n## Rationale\n\n_Why was this experiment accepted? What evidence supported it?_\n\n## Supporting Evidence\n\n- _List evidence files that informed this decision_\n\n---\n\n_Resolution made on: ${getCurrentDate()}_
-`
-          );
-
-          spinner.succeed(
-            `Accepted experiment '${experiment}' and created recipe '${recipeId}'`
-          );
-          if (missingStages.length > 0) {
-            console.log(
-              `  Note: Evidence gaps: missing ${missingStages.join(
-                ", "
-              )} stages`
-            );
-          }
-        } catch (error) {
-          ora().fail(`Error: ${(error as Error).message}`);
-          process.exit(1);
-        }
-      }
-    );
-
-  // ml reject <experiment> --reason <reason>
-  program
-    .command("reject <experiment>")
-    .description("Reject an experiment")
-    .requiredOption("--reason <reason>", "Reason for rejection")
-    .action(async (experiment: string, options: { reason: string }) => {
-      try {
-        const projectPath = process.cwd();
-
-        if (!mlspecWorkspaceExists(projectPath)) {
-          ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
-          process.exit(1);
-        }
-
-        if (!experimentExists(projectPath, experiment)) {
-          ora().fail(`Experiment '${experiment}' not found`);
-          process.exit(1);
-        }
-
-        const expMeta = loadExperimentMetadata(projectPath, experiment);
-        if (!expMeta) {
-          ora().fail(`Failed to load experiment metadata for '${experiment}'`);
-          process.exit(1);
-        }
-
-        // Check if experiment is already resolved
-        if (expMeta.status === "resolved") {
-          ora().fail(
-            `Experiment '${experiment}' is already resolved. Use 'mlspec retry' to re-run a resolved experiment.`
-          );
-          process.exit(1);
-        }
-
-        // Update experiment status to resolved
-        const experimentPath = resolveMlspecPath(
-          projectPath,
-          "experiments",
-          experiment,
-          "experiment.yaml"
-        );
-        expMeta.status = "resolved";
-        await fsp.writeFile(
-          experimentPath,
-          `# Experiment: ${experiment}\n\n${stringify(expMeta)}`
-        );
-
-        // Create resolution.md
-        const resolutionPath = resolveMlspecPath(
-          projectPath,
-          "experiments",
-          experiment,
-          "resolution.md"
-        );
-        const resolutionFrontmatter: Record<string, unknown> = {
-          entity_type: "resolution",
-          experiment_id: experiment,
-          resolution: "reject",
-          rejection_reason: options.reason,
-          rationale: "_Explain why this experiment was rejected_",
-          created: getCurrentDate(),
-        };
-
-        await fsp.writeFile(
-          resolutionPath,
-          `---\n${stringify(
-            resolutionFrontmatter
-          )}---\n\n# Resolution: ${experiment}\n\n## Decision: Reject\n\n**Reason**: ${
-            options.reason
-          }\n\n## Rationale\n\n_Why was this experiment rejected? What evidence supported it?_\n\n## Supporting Evidence\n\n- _List evidence files that informed this decision_\n\n---\n\n_Resolution made on: ${getCurrentDate()}_
-`
-        );
-
-        ora().succeed(`Rejected experiment '${experiment}'`);
-      } catch (error) {
-        ora().fail(`Error: ${(error as Error).message}`);
-        process.exit(1);
-      }
-    });
-
-  // ml retry <experiment> --plan <plan>
-  program
-    .command("retry <experiment>")
-    .description("Retry an experiment with modifications")
-    .requiredOption("--plan <plan>", "Plan for retry")
-    .action(async (experiment: string, options: { plan: string }) => {
-      try {
-        const projectPath = process.cwd();
-
-        if (!mlspecWorkspaceExists(projectPath)) {
-          ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
-          process.exit(1);
-        }
-
-        if (!experimentExists(projectPath, experiment)) {
-          ora().fail(`Experiment '${experiment}' not found`);
-          process.exit(1);
-        }
-
-        const expMeta = loadExperimentMetadata(projectPath, experiment);
-        if (!expMeta) {
-          ora().fail(`Failed to load experiment metadata for '${experiment}'`);
-          process.exit(1);
-        }
-
-        // Prevent re-resolving already resolved experiments
-        if (expMeta.status === "resolved") {
-          ora().fail(
-            `Experiment '${experiment}' is already resolved. Use 'mlspec retry' only on running experiments or use 'mlspec new experiment' to create a new experiment.`
-          );
-          process.exit(1);
-        }
-
-        // Reset experiment status to running for retry
-        const experimentPath = resolveMlspecPath(
-          projectPath,
-          "experiments",
-          experiment,
-          "experiment.yaml"
-        );
-        expMeta.status = "running";
-        await fsp.writeFile(
-          experimentPath,
-          `# Experiment: ${experiment}\n\n${stringify(expMeta)}`
-        );
-
-        // Create resolution.md
-        const resolutionPath = resolveMlspecPath(
-          projectPath,
-          "experiments",
-          experiment,
-          "resolution.md"
-        );
-        const resolutionFrontmatter: Record<string, unknown> = {
-          entity_type: "resolution",
-          experiment_id: experiment,
-          resolution: "retry",
-          revisit_condition: options.plan,
-          rationale: "_Explain why retrying with these modifications_",
-          created: getCurrentDate(),
-        };
-
-        await fsp.writeFile(
-          resolutionPath,
-          `---\n${stringify(
-            resolutionFrontmatter
-          )}---\n\n# Resolution: ${experiment}\n\n## Decision: Retry\n\n**Plan**: ${
-            options.plan
-          }\n\n## Rationale\n\n_Why is this experiment being retried? What will be different?_\n\n## Supporting Evidence\n\n- _List evidence files that informed this decision_\n\n---\n\n_Resolution made on: ${getCurrentDate()}_
-`
-        );
-
-        ora().succeed(`Marked experiment '${experiment}' for retry`);
-      } catch (error) {
-        ora().fail(`Error: ${(error as Error).message}`);
-        process.exit(1);
-      }
-    });
-
-  // ml hold <experiment> --reason <reason>
-  program
-    .command("hold <experiment>")
-    .description("Hold an experiment pending other work")
-    .requiredOption("--reason <reason>", "Blocker reason")
-    .action(async (experiment: string, options: { reason: string }) => {
-      try {
-        const projectPath = process.cwd();
-
-        if (!mlspecWorkspaceExists(projectPath)) {
-          ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
-          process.exit(1);
-        }
-
-        if (!experimentExists(projectPath, experiment)) {
-          ora().fail(`Experiment '${experiment}' not found`);
-          process.exit(1);
-        }
-
-        const expMeta = loadExperimentMetadata(projectPath, experiment);
-        if (!expMeta) {
-          ora().fail(`Failed to load experiment metadata for '${experiment}'`);
-          process.exit(1);
-        }
-
-        // Check if experiment is already resolved
-        if (expMeta.status === "resolved") {
-          ora().fail(
-            `Experiment '${experiment}' is already resolved. Use 'mlspec retry' to re-run a resolved experiment.`
-          );
-          process.exit(1);
-        }
-
-        // Create resolution.md
-        const resolutionPath = resolveMlspecPath(
-          projectPath,
-          "experiments",
-          experiment,
-          "resolution.md"
-        );
-        const resolutionFrontmatter: Record<string, unknown> = {
-          entity_type: "resolution",
-          experiment_id: experiment,
-          resolution: "hold",
-          blocker: options.reason,
-          revisit_condition: "_When the blocker is resolved_",
-          rationale: "_Explain why this experiment is being held_",
-          created: getCurrentDate(),
-        };
-
-        await fsp.writeFile(
-          resolutionPath,
-          `---\n${stringify(
-            resolutionFrontmatter
-          )}---\n\n# Resolution: ${experiment}\n\n## Decision: Hold\n\n**Blocker**: ${
-            options.reason
-          }\n\n## Rationale\n\n_Why is this experiment being held?_\n\n## Supporting Evidence\n\n- _List evidence files that informed this decision_\n\n---\n\n_Resolution made on: ${getCurrentDate()}_
-`
-        );
-
-        ora().succeed(`Marked experiment '${experiment}' as held`);
-      } catch (error) {
-        ora().fail(`Error: ${(error as Error).message}`);
-        process.exit(1);
-      }
-    });
-
-  // ml inconclusive <experiment> --reason <reason>
-  program
-    .command("inconclusive <experiment>")
-    .description("Mark an experiment as inconclusive")
-    .requiredOption("--reason <reason>", "Reason for inconclusive")
-    .action(async (experiment: string, options: { reason: string }) => {
-      try {
-        const projectPath = process.cwd();
-
-        if (!mlspecWorkspaceExists(projectPath)) {
-          ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
-          process.exit(1);
-        }
-
-        if (!experimentExists(projectPath, experiment)) {
-          ora().fail(`Experiment '${experiment}' not found`);
-          process.exit(1);
-        }
-
-        const expMeta = loadExperimentMetadata(projectPath, experiment);
-        if (!expMeta) {
-          ora().fail(`Failed to load experiment metadata for '${experiment}'`);
-          process.exit(1);
-        }
-
-        // Check if experiment is already resolved
-        if (expMeta.status === "resolved") {
-          ora().fail(
-            `Experiment '${experiment}' is already resolved. Use 'mlspec retry' to re-run a resolved experiment.`
-          );
-          process.exit(1);
-        }
-
-        // Create resolution.md
-        const resolutionPath = resolveMlspecPath(
-          projectPath,
-          "experiments",
-          experiment,
-          "resolution.md"
-        );
-        const resolutionFrontmatter: Record<string, unknown> = {
-          entity_type: "resolution",
-          experiment_id: experiment,
-          resolution: "inconclusive",
-          uncertainty_reason: options.reason,
-          rationale: "_Explain why this experiment is inconclusive_",
-          created: getCurrentDate(),
-        };
-
-        await fsp.writeFile(
-          resolutionPath,
-          `---\n${stringify(
-            resolutionFrontmatter
-          )}---\n\n# Resolution: ${experiment}\n\n## Decision: Inconclusive\n\n**Reason**: ${
-            options.reason
-          }\n\n## Rationale\n\n_Why is this experiment inconclusive? What additional evidence is needed?_\n\n## Supporting Evidence\n\n- _List evidence files that informed this decision_\n\n---\n\n_Resolution made on: ${getCurrentDate()}_
-`
-        );
-
-        ora().succeed(`Marked experiment '${experiment}' as inconclusive`);
-      } catch (error) {
         ora().fail(`Error: ${(error as Error).message}`);
         process.exit(1);
       }
@@ -1969,36 +1295,83 @@ outputs/${id}/
           }
 
           if (expMeta.status === "running") {
-            // Check abort criteria FIRST (priority per 2.5.6)
-            if (expMeta.abort_criteria && expMeta.abort_criteria.length > 0) {
+            const expDir = resolveMlspecPath(projectPath, "experiments", expId);
+            experimentExistingStages[expId] = [];
+
+            // V3: Check prepare.md status first
+            const preparePath = path.join(expDir, "prepare.md");
+            if (!fs.existsSync(preparePath)) {
               actions.push({
                 priority,
                 action_type: "run",
-                suggested_command: `mlspec add-evidence ${expId} --stage smoke`,
-                reason: `Experiment '${expId}' has abort criteria that need verification`,
+                suggested_command: `/mlspec-prepare`,
+                reason: `Experiment '${expId}' needs prepare.md (run /mlspec-prepare skill)`,
                 target: { type: "experiment", id: expId },
               });
               priority++;
+              continue;
             }
 
-            // Check for missing evidence
-            const expDir = resolveMlspecPath(projectPath, "experiments", expId);
-            experimentExistingStages[expId] = [];
-            for (const stage of EvidenceStageSchema.options) {
-              const evidencePath = path.join(expDir, "evidence", `${stage}.md`);
-              if (fs.existsSync(evidencePath)) {
-                experimentExistingStages[expId].push(stage);
-              } else {
-                actions.push({
-                  priority,
-                  action_type: "run",
-                  suggested_command: `mlspec add-evidence ${expId} --stage ${stage}`,
-                  reason: `Experiment '${expId}' needs ${stage} evidence`,
-                  target: { type: "experiment", id: expId },
-                });
-                priority++;
-                break;
+            // Check prepare status
+            try {
+              const prepareContent = fs.readFileSync(preparePath, "utf-8");
+              const prepareParsed = parseFrontmatter(prepareContent);
+              if (prepareParsed) {
+                const prepareResult = PrepareMetadataSchema.safeParse(prepareParsed);
+                if (!prepareResult.success || prepareResult.data.status !== "ready") {
+                  actions.push({
+                    priority,
+                    action_type: "run",
+                    suggested_command: `/mlspec-prepare`,
+                    reason: `Experiment '${expId}' prepare.md status is '${prepareResult.success ? prepareResult.data.status : "invalid"}' (run /mlspec-prepare skill)`,
+                    target: { type: "experiment", id: expId },
+                  });
+                  priority++;
+                  continue;
+                }
               }
+            } catch {
+              // If we can't parse prepare.md, suggest running prepare
+              actions.push({
+                priority,
+                action_type: "run",
+                suggested_command: `/mlspec-prepare`,
+                reason: `Experiment '${expId}' has invalid prepare.md (run /mlspec-prepare skill)`,
+                target: { type: "experiment", id: expId },
+              });
+              priority++;
+              continue;
+            }
+
+            // V3: Load evidence ladder and check for missing evidence
+            try {
+              const ladder = getEvidenceLadder(projectPath, expId);
+              for (const rung of ladder) {
+                const evidencePath = path.join(expDir, "evidence", `${rung.id}.md`);
+                if (fs.existsSync(evidencePath)) {
+                  experimentExistingStages[expId].push(rung.id);
+                } else {
+                  actions.push({
+                    priority,
+                    action_type: "run",
+                    suggested_command: `mlspec run ${expId} ${rung.id}`,
+                    reason: `Experiment '${expId}' needs ${rung.id} evidence (run /mlspec-run skill)`,
+                    target: { type: "experiment", id: expId },
+                  });
+                  priority++;
+                  // Don't break - suggest all missing rungs
+                }
+              }
+            } catch {
+              // Protocol may not exist yet - this is an error state
+              actions.push({
+                priority,
+                action_type: "none",
+                suggested_command: `mlspec validate`,
+                reason: `Experiment '${expId}' is missing protocol.md`,
+                target: { type: "experiment", id: expId },
+              });
+              priority++;
             }
           }
 
@@ -2148,18 +1521,23 @@ outputs/${id}/
             "experiments",
             experimentId
           );
-          const evidenceStages: Record<
+
+          // V3: Load evidence ladder from protocol.md
+          const ladder = getEvidenceLadder(projectPath, experimentId);
+          const evidenceRungs: Record<
             string,
             {
               exists: boolean;
               path: string | null;
-              recommendation: string | null;
+              rung_id: string | null;
+              can_resolve: boolean;
+              has_comparison: boolean;
             }
           > = {};
-          const missingStages: string[] = [];
+          const missingRungs: string[] = [];
 
-          for (const stage of EvidenceStageSchema.options) {
-            const evidencePath = path.join(expDir, "evidence", `${stage}.md`);
+          for (const rung of ladder) {
+            const evidencePath = path.join(expDir, "evidence", `${rung.id}.md`);
             if (fs.existsSync(evidencePath)) {
               try {
                 const content = fs.readFileSync(evidencePath, "utf-8");
@@ -2167,50 +1545,77 @@ outputs/${id}/
                 if (frontmatterMatch) {
                   const parsed = parseYaml(
                     frontmatterMatch[1]
-                  ) as EvidenceFrontmatter;
-                  evidenceStages[stage] = {
+                  ) as RungEvidence;
+                  evidenceRungs[rung.id] = {
                     exists: true,
                     path: evidencePath,
-                    recommendation: parsed.recommendation || null,
+                    rung_id: rung.id,
+                    can_resolve: rung.can_resolve,
+                    has_comparison: !!parsed.comparison,
                   };
                 } else {
-                  evidenceStages[stage] = {
+                  evidenceRungs[rung.id] = {
                     exists: true,
                     path: evidencePath,
-                    recommendation: null,
+                    rung_id: rung.id,
+                    can_resolve: rung.can_resolve,
+                    has_comparison: false,
                   };
                 }
               } catch {
-                evidenceStages[stage] = {
+                evidenceRungs[rung.id] = {
                   exists: true,
                   path: evidencePath,
-                  recommendation: null,
+                  rung_id: rung.id,
+                  can_resolve: rung.can_resolve,
+                  has_comparison: false,
                 };
               }
             } else {
-              evidenceStages[stage] = {
+              evidenceRungs[rung.id] = {
                 exists: false,
                 path: null,
-                recommendation: null,
+                rung_id: rung.id,
+                can_resolve: rung.can_resolve,
+                has_comparison: false,
               };
-              missingStages.push(stage);
+              missingRungs.push(rung.id);
             }
           }
 
-          const hasRecommendation = Object.values(evidenceStages).some(
-            (s) => s.exists && s.recommendation
+          const hasCanResolveEvidence = Object.values(evidenceRungs).some(
+            (r) => r.exists && r.can_resolve
           );
           const readyToResolve =
-            expMeta.status !== "resolved" && hasRecommendation;
+            expMeta.status !== "resolved" && hasCanResolveEvidence;
+
+          // V3: Also load prepare status if prepare.md exists
+          const preparePath = path.join(expDir, "prepare.md");
+          let prepare_status: string | null = null;
+          if (fs.existsSync(preparePath)) {
+            try {
+              const prepareContent = fs.readFileSync(preparePath, "utf-8");
+              const prepareParsed = parseFrontmatter(prepareContent);
+              if (prepareParsed) {
+                const prepareResult = PrepareMetadataSchema.safeParse(prepareParsed);
+                if (prepareResult.success) {
+                  prepare_status = prepareResult.data.status;
+                }
+              }
+            } catch {
+              // ignore parse errors
+            }
+          }
 
           const output = {
             experiment_id: experimentId,
             status: expMeta.status,
             base_recipe: expMeta.base_recipe,
             proposed_recipe: expMeta.proposed_recipe,
-            evidence_stages: evidenceStages,
-            missing_stages: missingStages,
-            has_recommendation: hasRecommendation,
+            prepare_status,
+            evidence_ladder_status: evidenceRungs,
+            missing_rungs: missingRungs,
+            has_can_resolve_evidence: hasCanResolveEvidence,
             ready_to_resolve: readyToResolve,
           };
           console.log(JSON.stringify(output, null, 2));
@@ -2308,23 +1713,29 @@ outputs/${id}/
               console.log(`${status}:`);
               for (const exp of exps) {
                 const expMeta = loadExperimentMetadata(projectPath, exp);
-                const evidenceStages: string[] = [];
+                const evidenceRungs: string[] = [];
                 const expDir = resolveMlspecPath(
                   projectPath,
                   "experiments",
                   exp
                 );
-                for (const stage of EvidenceStageSchema.options) {
-                  if (
-                    fs.existsSync(path.join(expDir, "evidence", `${stage}.md`))
-                  ) {
-                    evidenceStages.push(stage);
+                // V3: Load evidence ladder and check which rungs have evidence
+                try {
+                  const ladder = getEvidenceLadder(projectPath, exp);
+                  for (const rung of ladder) {
+                    if (
+                      fs.existsSync(path.join(expDir, "evidence", `${rung.id}.md`))
+                    ) {
+                      evidenceRungs.push(rung.id);
+                    }
                   }
+                } catch {
+                  // Experiment may not have protocol.md yet
                 }
                 console.log(
                   `  - ${exp} (${expMeta?.base_recipe || "?"} → ${
                     expMeta?.proposed_recipe || "?"
-                  }, evidence: ${evidenceStages.join(", ") || "none"})`
+                  }, evidence: ${evidenceRungs.join(", ") || "none"})`
                 );
               }
               console.log();
@@ -2344,12 +1755,25 @@ outputs/${id}/
     });
 
   // ==========================================================================
-  // Validate Command (V2)
+  // Validate Command (V3)
   // ==========================================================================
+
+  /**
+   * Parse YAML frontmatter from markdown content.
+   */
+  function parseFrontmatter(content: string): Record<string, unknown> | null {
+    const match = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!match) return null;
+    try {
+      return parseYaml(match[1]) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
 
   program
     .command("validate")
-    .description("Validate MLSpec workspace structure (V2)")
+    .description("Validate MLSpec workspace structure (V3)")
     .option("--strict", "Enable strict validation (warnings as errors)")
     .action(async (options: { strict?: boolean }) => {
       try {
@@ -2364,29 +1788,23 @@ outputs/${id}/
         const errors: string[] = [];
         const warnings: string[] = [];
 
-        // Check workspace version
+        // Check workspace version (V3 requires version 3)
         const workspacePath = resolveMlspecPath(projectPath, ".workspace.yaml");
         if (!fs.existsSync(workspacePath)) {
           errors.push("Missing .workspace.yaml");
         } else {
           try {
             const content = fs.readFileSync(workspacePath, "utf-8");
-            const parsed = parseYaml(content);
-            if (parsed.workspace_version !== 2) {
-              errors.push("Workspace is not V2 (workspace_version must be 2)");
+            const parsed = parseYaml(content) as { workspace_version?: number };
+            if (parsed.workspace_version !== 3) {
+              errors.push(`Workspace version ${parsed.workspace_version || 'unknown'} is not supported. V3 CLI requires workspace_version 3.`);
             }
           } catch {
             errors.push("Failed to parse .workspace.yaml");
           }
         }
 
-        // Check evaluation.md
-        const evaluationPath = resolveMlspecPath(projectPath, "evaluation.md");
-        if (!fs.existsSync(evaluationPath)) {
-          errors.push("Missing evaluation.md");
-        }
-
-        // Validate recipes
+        // Validate recipes (V2/V3 - unchanged)
         const recipes = listRecipes(projectPath);
         const recipeIds = new Set<string>();
         for (const recipeId of recipes) {
@@ -2405,13 +1823,11 @@ outputs/${id}/
                   `Recipe '${recipeId}': invalid recipe.yaml - ${result.error.message}`
                 );
               } else {
-                // Check for duplicate IDs
                 if (recipeIds.has(result.data.id)) {
                   errors.push(`Recipe '${recipeId}': duplicate recipe ID`);
                 }
                 recipeIds.add(result.data.id);
 
-                // Check parent exists
                 if (
                   result.data.parent_recipe &&
                   !recipes.includes(result.data.parent_recipe)
@@ -2421,15 +1837,11 @@ outputs/${id}/
                   );
                 }
 
-                // Check for cycle in parent chain
                 const visited = new Set<string>();
-                let current: string | null | undefined =
-                  result.data.parent_recipe;
+                let current: string | null | undefined = result.data.parent_recipe;
                 while (current) {
                   if (visited.has(current)) {
-                    errors.push(
-                      `Recipe '${recipeId}': cycle detected in parent chain`
-                    );
+                    errors.push(`Recipe '${recipeId}': cycle detected in parent chain`);
                     break;
                   }
                   visited.add(current);
@@ -2437,7 +1849,6 @@ outputs/${id}/
                   current = parentMeta?.parent_recipe || null;
                 }
 
-                // Warn on multiple current-best tags
                 if (result.data.tags?.includes("current-best")) {
                   const currentBestCount = recipes.filter((r) => {
                     const meta = loadRecipeMetadata(projectPath, r);
@@ -2445,9 +1856,7 @@ outputs/${id}/
                   });
                   if (currentBestCount.length > 1) {
                     warnings.push(
-                      `Multiple recipes have 'current-best' tag (${currentBestCount.join(
-                        ", "
-                      )})`
+                      `Multiple recipes have 'current-best' tag (${currentBestCount.join(", ")})`
                     );
                   }
                 }
@@ -2458,13 +1867,9 @@ outputs/${id}/
           }
         }
 
-        // Validate experiments
+        // Validate experiments (V3 with protocol/prepare/rung)
         for (const experiment of listExperiments(projectPath)) {
-          const experimentDir = resolveMlspecPath(
-            projectPath,
-            "experiments",
-            experiment
-          );
+          const experimentDir = resolveMlspecPath(projectPath, "experiments", experiment);
           const metaPath = path.join(experimentDir, "experiment.yaml");
           const hypothesisPath = path.join(experimentDir, "hypothesis.md");
 
@@ -2480,14 +1885,11 @@ outputs/${id}/
                   `Experiment '${experiment}': invalid experiment.yaml - ${result.error.message}`
                 );
               } else {
-                // Check base_recipe exists
                 if (!recipeIds.has(result.data.base_recipe)) {
                   errors.push(
                     `Experiment '${experiment}': base_recipe '${result.data.base_recipe}' does not exist`
                   );
                 }
-
-                // Check proposed_recipe format (it may not exist yet, just validate format)
                 if (!isValidEntityName(result.data.proposed_recipe)) {
                   errors.push(
                     `Experiment '${experiment}': proposed_recipe '${result.data.proposed_recipe}' is not a valid entity name`
@@ -2495,9 +1897,7 @@ outputs/${id}/
                 }
               }
             } catch {
-              errors.push(
-                `Experiment '${experiment}': failed to parse experiment.yaml`
-              );
+              errors.push(`Experiment '${experiment}': failed to parse experiment.yaml`);
             }
           }
 
@@ -2505,91 +1905,141 @@ outputs/${id}/
             errors.push(`Experiment '${experiment}': missing hypothesis.md`);
           }
 
-          // Validate evidence stages
-          for (const stage of EvidenceStageSchema.options) {
-            const evidencePath = path.join(
-              experimentDir,
-              "evidence",
-              `${stage}.md`
-            );
-            if (fs.existsSync(evidencePath)) {
-              try {
-                const content = fs.readFileSync(evidencePath, "utf-8");
-                const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-                if (frontmatterMatch) {
-                  const parsed = parseYaml(frontmatterMatch[1]);
-                  const result = EvidenceFrontmatterSchema.safeParse(parsed);
-                  if (!result.success) {
-                    errors.push(
-                      `Experiment '${experiment}' evidence ${stage}: ${result.error.message}`
-                    );
-                  }
-                } else {
+          // V3: Validate protocol.md
+          const protocolPath = path.join(experimentDir, "protocol.md");
+          if (!fs.existsSync(protocolPath)) {
+            errors.push(`Experiment '${experiment}': missing protocol.md`);
+          } else {
+            try {
+              const content = fs.readFileSync(protocolPath, "utf-8");
+              const parsed = parseFrontmatter(content);
+              if (!parsed) {
+                errors.push(`Experiment '${experiment}': protocol.md missing frontmatter`);
+              } else {
+                const result = ProtocolMetadataSchema.safeParse(parsed);
+                if (!result.success) {
                   errors.push(
-                    `Experiment '${experiment}' evidence ${stage}: missing frontmatter`
+                    `Experiment '${experiment}': invalid protocol.md - ${result.error.message}`
                   );
+                } else {
+                  // Check evidence_ladder is non-empty
+                  if (!result.data.evidence_ladder || result.data.evidence_ladder.length === 0) {
+                    errors.push(`Experiment '${experiment}': protocol.md evidence_ladder is empty`);
+                  }
+                  // Check compute_agreement exists
+                  if (!result.data.compute_agreement) {
+                    warnings.push(`Experiment '${experiment}': protocol.md missing compute_agreement`);
+                  }
                 }
-              } catch {
+              }
+            } catch {
+              errors.push(`Experiment '${experiment}': failed to parse protocol.md`);
+            }
+          }
+
+          // V3: Validate prepare.md if it exists
+          const preparePath = path.join(experimentDir, "prepare.md");
+          let prepareStatus: string | null = null;
+          if (fs.existsSync(preparePath)) {
+            try {
+              const content = fs.readFileSync(preparePath, "utf-8");
+              const parsed = parseFrontmatter(content);
+              if (!parsed) {
+                errors.push(`Experiment '${experiment}': prepare.md missing frontmatter`);
+              } else {
+                const result = PrepareMetadataSchema.safeParse(parsed);
+                if (!result.success) {
+                  errors.push(
+                    `Experiment '${experiment}': invalid prepare.md - ${result.error.message}`
+                  );
+                } else {
+                  prepareStatus = result.data.status;
+                }
+              }
+            } catch {
+              errors.push(`Experiment '${experiment}': failed to parse prepare.md`);
+            }
+          }
+
+          // V3: Validate evidence files using protocol.evidence_ladder
+          const ladder = getEvidenceLadder(projectPath, experiment);
+          const evidenceDir = path.join(experimentDir, "evidence");
+
+          // Check for evidence files that don't correspond to a rung in the ladder
+          if (fs.existsSync(evidenceDir)) {
+            const evidenceFiles = fs.readdirSync(evidenceDir).filter((f) => f.endsWith(".md"));
+            const rungIds = new Set(ladder.map((r) => r.id));
+
+            for (const file of evidenceFiles) {
+              const rungId = file.replace(/\.md$/, "");
+              if (!rungIds.has(rungId)) {
                 errors.push(
-                  `Experiment '${experiment}' evidence ${stage}: failed to parse`
+                  `Experiment '${experiment}': evidence/${file} rung '${rungId}' not in protocol.evidence_ladder`
                 );
               }
             }
           }
 
-          // Check for resolution.md if experiment is resolved
+          // Validate evidence for each rung in the ladder
+          for (const rung of ladder) {
+            const evidencePath = path.join(evidenceDir, `${rung.id}.md`);
+            if (fs.existsSync(evidencePath)) {
+              try {
+                const content = fs.readFileSync(evidencePath, "utf-8");
+                const parsed = parseFrontmatter(content);
+                if (!parsed) {
+                  errors.push(`Experiment '${experiment}': evidence/${rung.id}.md missing frontmatter`);
+                } else {
+                  const result = RungEvidenceSchema.safeParse(parsed);
+                  if (!result.success) {
+                    errors.push(
+                      `Experiment '${experiment}' evidence/${rung.id}: ${result.error.message}`
+                    );
+                  }
+                }
+              } catch {
+                errors.push(`Experiment '${experiment}' evidence/${rung.id}: failed to parse`);
+              }
+            }
+          }
+
+          // Check prepare.md exists and has status=ready if evidence exists
+          const hasEvidence = fs.existsSync(evidenceDir) &&
+            fs.readdirSync(evidenceDir).filter((f) => f.endsWith(".md")).length > 0;
+          if (hasEvidence) {
+            if (!fs.existsSync(preparePath)) {
+              errors.push(
+                `Experiment '${experiment}': has evidence but missing prepare.md`
+              );
+            } else if (prepareStatus && prepareStatus !== "ready") {
+              errors.push(
+                `Experiment '${experiment}': has evidence but prepare.md status is '${prepareStatus}' (must be 'ready')`
+              );
+            }
+          }
+
+          // V3: Check resolution.md if experiment is resolved
           const expMeta = loadExperimentMetadata(projectPath, experiment);
           if (expMeta?.status === "resolved") {
             const resolutionPath = path.join(experimentDir, "resolution.md");
             if (!fs.existsSync(resolutionPath)) {
-              errors.push(
-                `Experiment '${experiment}' is resolved but missing resolution.md`
-              );
+              errors.push(`Experiment '${experiment}': is resolved but missing resolution.md`);
             } else {
               try {
                 const content = fs.readFileSync(resolutionPath, "utf-8");
-                const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-                if (frontmatterMatch) {
-                  const parsed = parseYaml(frontmatterMatch[1]);
+                const parsed = parseFrontmatter(content);
+                if (!parsed) {
+                  errors.push(`Experiment '${experiment}': resolution.md missing frontmatter`);
+                } else {
                   const result = ResolutionFrontmatterSchema.safeParse(parsed);
                   if (!result.success) {
                     errors.push(
                       `Experiment '${experiment}' resolution: ${result.error.message}`
                     );
                   }
-                  // Warn on acceptance based on evidence level and target tag
-                  if (parsed.resolution === "accept") {
-                    const hasValidation = fs.existsSync(
-                      path.join(experimentDir, "evidence", "validation.md")
-                    );
-                    const hasFinal = fs.existsSync(
-                      path.join(experimentDir, "evidence", "final.md")
-                    );
-                    const acceptedTags = parsed.accepted_tags || [];
-                    const isCurrentBest = acceptedTags.includes("current-best");
-
-                    if (!hasValidation && !hasFinal) {
-                      // smoke evidence only
-                      if (isCurrentBest) {
-                        warnings.push(
-                          `Experiment '${experiment}': Strong warning: accepting as current-best from smoke evidence`
-                        );
-                      } else {
-                        warnings.push(
-                          `Experiment '${experiment}': Accepting as candidate from smoke evidence is premature`
-                        );
-                      }
-                    } else if (hasFinal && isCurrentBest) {
-                      warnings.push(
-                        `Experiment '${experiment}': Final evidence provides strongest support for current-best`
-                      );
-                    }
-                  }
                 }
               } catch {
-                errors.push(
-                  `Experiment '${experiment}' resolution: failed to parse`
-                );
+                errors.push(`Experiment '${experiment}' resolution: failed to parse`);
               }
             }
           }
@@ -2614,9 +2064,7 @@ outputs/${id}/
         if (errors.length === 0) {
           ora().succeed("MLSpec workspace is valid");
           if (warnings.length > 0) {
-            console.log(
-              `  ${warnings.length} warning(s) - use --strict to treat warnings as errors`
-            );
+            console.log(`  ${warnings.length} warning(s) - use --strict to treat warnings as errors`);
             if (options.strict) {
               ora().fail("Strict validation failed due to warnings");
               process.exit(1);
@@ -2626,6 +2074,213 @@ outputs/${id}/
           ora().fail(`MLSpec workspace has ${errors.length} error(s)`);
           process.exit(1);
         }
+      } catch (error) {
+        ora().fail(`Error: ${(error as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  // ==========================================================================
+  // prepare Command (V3 Gate Checker)
+  // ==========================================================================
+
+  program
+    .command("prepare <experiment>")
+    .description("Validate prepare.md artifact for an experiment (V3)")
+    .action(async (experiment: string) => {
+      try {
+        const projectPath = process.cwd();
+
+        if (!mlspecWorkspaceExists(projectPath)) {
+          ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
+          process.exit(1);
+        }
+
+        if (!experimentExists(projectPath, experiment)) {
+          ora().fail(`Experiment '${experiment}' not found`);
+          process.exit(1);
+        }
+
+        const experimentDir = resolveMlspecPath(projectPath, "experiments", experiment);
+        const preparePath = path.join(experimentDir, "prepare.md");
+
+        // Check prepare.md exists
+        if (!fs.existsSync(preparePath)) {
+          ora().fail(`prepare.md not found for experiment '${experiment}'`);
+          process.exit(1);
+        }
+
+        // Parse and validate prepare.md
+        const content = fs.readFileSync(preparePath, "utf-8");
+        const parsed = parseFrontmatter(content);
+
+        if (!parsed) {
+          ora().fail(`prepare.md missing frontmatter for experiment '${experiment}'`);
+          process.exit(1);
+        }
+
+        const result = PrepareMetadataSchema.safeParse(parsed);
+        if (!result.success) {
+          ora().fail(`prepare.md schema invalid: ${result.error.message}`);
+          process.exit(1);
+        }
+
+        // Return exit code based on status
+        const status = result.data.status;
+        switch (status) {
+          case "ready":
+            ora().succeed(`prepare.md status: ready`);
+            process.exit(0);
+          case "needs_work":
+            ora().warn(`prepare.md status: needs_work`);
+            process.exit(1);
+          case "protocol_change_required":
+            ora().warn(`prepare.md status: protocol_change_required`);
+            process.exit(2);
+          default:
+            ora().fail(`prepare.md has unknown status: ${status}`);
+            process.exit(1);
+        }
+      } catch (error) {
+        ora().fail(`Error: ${(error as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  // ==========================================================================
+  // run Command (V3 Preflight Gate Checker)
+  // ==========================================================================
+
+  program
+    .command("run <experiment> <rung>")
+    .description("Validate that evidence can be collected for a rung (V3 gate checker)")
+    .action(async (experiment: string, rung: string) => {
+      try {
+        const projectPath = process.cwd();
+
+        if (!mlspecWorkspaceExists(projectPath)) {
+          ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
+          process.exit(1);
+        }
+
+        if (!experimentExists(projectPath, experiment)) {
+          ora().fail(`Experiment '${experiment}' not found`);
+          process.exit(1);
+        }
+
+        const experimentDir = resolveMlspecPath(projectPath, "experiments", experiment);
+
+        // Check protocol.md exists
+        const protocolPath = path.join(experimentDir, "protocol.md");
+        if (!fs.existsSync(protocolPath)) {
+          ora().fail(`protocol.md not found - experiment '${experiment}' has no evidence ladder`);
+          process.exit(1);
+        }
+
+        // Load protocol and check rung exists
+        const ladder = getEvidenceLadder(projectPath, experiment);
+        const rungExists = ladder.some((r) => r.id === rung);
+        if (!rungExists) {
+          ora().fail(`Rung '${rung}' not found in protocol.evidence_ladder`);
+          process.exit(1);
+        }
+
+        // Check prepare.md exists and status=ready
+        const preparePath = path.join(experimentDir, "prepare.md");
+        if (!fs.existsSync(preparePath)) {
+          ora().fail(`prepare.md not found - run /mlspec-prepare first`);
+          process.exit(1);
+        }
+
+        const prepareContent = fs.readFileSync(preparePath, "utf-8");
+        const prepareParsed = parseFrontmatter(prepareContent);
+        if (!prepareParsed) {
+          ora().fail(`prepare.md missing frontmatter`);
+          process.exit(1);
+        }
+
+        const prepareResult = PrepareMetadataSchema.safeParse(prepareParsed);
+        if (!prepareResult.success) {
+          ora().fail(`prepare.md schema invalid: ${prepareResult.error.message}`);
+          process.exit(1);
+        }
+
+        if (prepareResult.data.status !== "ready") {
+          ora().fail(`prepare.md status is '${prepareResult.data.status}' - must be 'ready' before collecting evidence`);
+          process.exit(1);
+        }
+
+        // Check evidence/<rung>.md doesn't already exist
+        const evidencePath = path.join(experimentDir, "evidence", `${rung}.md`);
+        if (fs.existsSync(evidencePath)) {
+          ora().fail(`evidence/${rung}.md already exists - cannot overwrite`);
+          process.exit(1);
+        }
+
+        // Gate passed
+        ora().succeed(`Gate check passed: experiment '${experiment}' rung '${rung}' is ready for evidence collection`);
+        process.exit(0);
+      } catch (error) {
+        ora().fail(`Error: ${(error as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  // ==========================================================================
+  // resolve Command (V3 Preflight Gate Checker)
+  // ==========================================================================
+
+  program
+    .command("resolve <experiment>")
+    .description("Validate that experiment can be resolved (V3 gate checker)")
+    .action(async (experiment: string) => {
+      try {
+        const projectPath = process.cwd();
+
+        if (!mlspecWorkspaceExists(projectPath)) {
+          ora().fail('MLSpec workspace not found. Run "mlspec init" first.');
+          process.exit(1);
+        }
+
+        if (!experimentExists(projectPath, experiment)) {
+          ora().fail(`Experiment '${experiment}' not found`);
+          process.exit(1);
+        }
+
+        const experimentDir = resolveMlspecPath(projectPath, "experiments", experiment);
+
+        // Check protocol.md exists
+        const protocolPath = path.join(experimentDir, "protocol.md");
+        if (!fs.existsSync(protocolPath)) {
+          ora().fail(`protocol.md not found`);
+          process.exit(1);
+        }
+
+        // Find can_resolve rung
+        const ladder = getEvidenceLadder(projectPath, experiment);
+        const canResolveRung = ladder.find((r) => r.can_resolve);
+        if (!canResolveRung) {
+          ora().fail(`No rung with can_resolve=true in protocol.evidence_ladder`);
+          process.exit(1);
+        }
+
+        // Check evidence exists for can_resolve rung
+        const evidencePath = path.join(experimentDir, "evidence", `${canResolveRung.id}.md`);
+        if (!fs.existsSync(evidencePath)) {
+          ora().fail(`No evidence for can_resolve rung '${canResolveRung.id}'`);
+          process.exit(1);
+        }
+
+        // Check resolution.md doesn't already exist
+        const resolutionPath = path.join(experimentDir, "resolution.md");
+        if (fs.existsSync(resolutionPath)) {
+          ora().fail(`resolution.md already exists`);
+          process.exit(1);
+        }
+
+        // Gate passed
+        ora().succeed(`Gate check passed: experiment '${experiment}' can be resolved`);
+        process.exit(0);
       } catch (error) {
         ora().fail(`Error: ${(error as Error).message}`);
         process.exit(1);

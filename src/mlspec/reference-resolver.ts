@@ -11,6 +11,9 @@ import { resolveMlspecPath } from './utils.js';
 import type {
   ExperimentMetadata,
   RecipeMetadata,
+  ProtocolMetadata,
+  PrepareMetadata,
+  EvidenceRung,
 } from './entity-types.js';
 import { parse as parseYaml } from 'yaml';
 
@@ -195,4 +198,149 @@ export function getRecipeAncestry(projectPath: string, recipeId: string): string
   }
 
   return ancestry.reverse();
+}
+
+// ============================================================================
+// V3 Reference Resolver Functions
+// ============================================================================
+
+/**
+ * Check if protocol.md exists for an experiment.
+ */
+export function protocolExists(projectPath: string, experiment: string): boolean {
+  const protocolPath = resolveMlspecPath(projectPath, 'experiments', experiment, 'protocol.md');
+  return fs.existsSync(protocolPath);
+}
+
+/**
+ * Parse YAML frontmatter from markdown content.
+ */
+function parseFrontmatter(content: string): Record<string, unknown> | null {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return null;
+  try {
+    return parseYaml(match[1]) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load protocol metadata.
+ */
+export function loadProtocolMetadata(projectPath: string, experiment: string): ProtocolMetadata | null {
+  const protocolPath = resolveMlspecPath(projectPath, 'experiments', experiment, 'protocol.md');
+  if (!fs.existsSync(protocolPath)) {
+    return null;
+  }
+  try {
+    const content = fs.readFileSync(protocolPath, 'utf-8');
+    const parsed = parseFrontmatter(content);
+    if (!parsed) return null;
+    return parsed as ProtocolMetadata;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if prepare.md exists for an experiment.
+ */
+export function prepareExists(projectPath: string, experiment: string): boolean {
+  const preparePath = resolveMlspecPath(projectPath, 'experiments', experiment, 'prepare.md');
+  return fs.existsSync(preparePath);
+}
+
+/**
+ * Load prepare metadata.
+ */
+export function loadPrepareMetadata(projectPath: string, experiment: string): PrepareMetadata | null {
+  const preparePath = resolveMlspecPath(projectPath, 'experiments', experiment, 'prepare.md');
+  if (!fs.existsSync(preparePath)) {
+    return null;
+  }
+  try {
+    const content = fs.readFileSync(preparePath, 'utf-8');
+    const parsed = parseFrontmatter(content);
+    if (!parsed) return null;
+    return parsed as PrepareMetadata;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the evidence ladder for an experiment.
+ */
+export function getEvidenceLadder(projectPath: string, experiment: string): EvidenceRung[] {
+  const protocol = loadProtocolMetadata(projectPath, experiment);
+  return protocol?.evidence_ladder ?? [];
+}
+
+/**
+ * Get the evidence path for a specific rung.
+ */
+export function getRungEvidencePath(projectPath: string, experiment: string, rung: string): string {
+  return resolveMlspecPath(projectPath, 'experiments', experiment, 'evidence', `${rung}.md`);
+}
+
+/**
+ * V3 Protocol state for an experiment.
+ */
+export type ProtocolStateV3 = 'needs prepare' | 'needs evidence' | 'running' | 'needs resolution' | 'resolved';
+
+/**
+ * Get the protocol state for an experiment (V3).
+ *
+ * Determines what step in the experiment protocol an experiment is at
+ * based on the files that exist and their content.
+ */
+export function getProtocolStateV3(projectPath: string, experiment: string): ProtocolStateV3 {
+  const experimentPath = resolveMlspecPath(projectPath, 'experiments', experiment, 'experiment.yaml');
+  const evidenceDir = resolveMlspecPath(projectPath, 'experiments', experiment, 'evidence');
+  const resolutionPath = resolveMlspecPath(projectPath, 'experiments', experiment, 'resolution.md');
+
+  // Load experiment to check status
+  if (!fs.existsSync(experimentPath)) {
+    return 'needs prepare';
+  }
+
+  try {
+    const content = fs.readFileSync(experimentPath, 'utf-8');
+    const meta = parseYaml(content) as ExperimentMetadata;
+    if (meta.status === 'resolved') {
+      return 'resolved';
+    }
+
+    // Check if prepare is done
+    const prepare = loadPrepareMetadata(projectPath, experiment);
+    if (!prepare || prepare.status !== 'ready') {
+      return 'needs prepare';
+    }
+
+    // Check if has evidence
+    const hasEvidence = fs.existsSync(evidenceDir) &&
+      fs.readdirSync(evidenceDir).filter((f: string) => f.endsWith('.md')).length > 0;
+
+    if (!hasEvidence) {
+      return 'needs evidence';
+    }
+
+    if (meta.status === 'running') {
+      // Check if can_resolve rung has evidence
+      const ladder = getEvidenceLadder(projectPath, experiment);
+      const canResolveRung = ladder.find((r) => r.can_resolve);
+      if (canResolveRung) {
+        const evidencePath = getRungEvidencePath(projectPath, experiment, canResolveRung.id);
+        if (fs.existsSync(evidencePath)) {
+          return 'needs resolution';
+        }
+      }
+      return 'running';
+    }
+
+    return 'needs evidence';
+  } catch {
+    return 'needs prepare';
+  }
 }

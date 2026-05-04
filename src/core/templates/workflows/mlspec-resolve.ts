@@ -1,59 +1,36 @@
 /**
- * MLSpec Resolve Skill Template
+ * MLSpec Resolve Skill Template (V3)
  *
- * Skill for resolving experiments based on evidence.
+ * Skill for resolving experiments using separated mechanistic and practical outcomes.
  */
 import type { SkillTemplate, CommandTemplate } from '../types.js';
 
 export function getMlspecResolveSkillTemplate(): SkillTemplate {
   return {
     name: 'mlspec-resolve',
-    description: 'Resolve an experiment (accept, reject, retry, hold, inconclusive) based on evidence. Accept creates a new recipe node.',
+    description: 'Resolve an experiment based on evidence from can_resolve rung. Separates mechanistic and practical outcomes.',
     instructions: `Resolve an experiment based on evidence.
 
-This skill reads all evidence for an experiment and creates a resolution. On accept, it creates a new recipe node.
+This skill reads evidence from the can_resolve=true rung and creates a resolution with separated mechanistic and practical outcomes.
+
+---
+
+## Prerequisites
+
+- Experiment has evidence for a rung with can_resolve=true
+- protocol.md defines the evidence ladder
+- You have reviewed evidence/<rung>.md for the can_resolve rung
 
 ---
 
 **Pause if:**
 - Experiment status is 'resolved' → output "already resolved" blocked state
-- Evidence contradicts itself across stages → output "evidence conflict" blocked state
+- No evidence exists for any can_resolve=true rung → output "no resolvable evidence" blocked state
+- Resolution file already exists → output "resolution exists" blocked state
 
 ---
 
-**Input**: Optional experiment ID and resolution type.
-
----
-
-**Pre-flight Checks**
-
-Before resolving:
-
-1. **Check experiment status**
-   - Run: \`mlspec status --experiment <id> --json\`
-   - If status === 'resolved':
-     - Output blocked state: "Resolution Blocked: Already Resolved"
-     - Do NOT proceed
-     - Suggest /mlspec-next
-   - Note: \`mlspec status --experiment <id>\` is JSON-only in 2.1.0; it returns JSON error if --json is omitted
-
-2. **Check evidence exists**
-   - Run: \`mlspec show evidence <id> --json\`
-   - If no evidence stages have \`exists: true\`:
-     - Show warning: "No evidence recorded. Resolving without evidence is not recommended."
-     - Allow proceed if user confirms
-
-3. **Check for evidence conflicts**
-   - From \`mlspec show evidence --json\` output, check recommendations across stages
-   - If smoke recommends 'accept' but final recommends 'reject' (or vice versa):
-     - Output blocked state: "Resolution Blocked: Evidence Conflict"
-     - Pause asking how to proceed
-
-If JSON commands fail, fall back to direct file inspection.
-
----
-
-**Resolution Types**
+## Resolution Types
 
 | Type | Action |
 |------|--------|
@@ -61,115 +38,181 @@ If JSON commands fail, fall back to direct file inspection.
 | reject | End experiment, no recipe |
 | retry | Return to running with modifications |
 | hold | Pause for later review |
-| inconclusive | Evidence neither supports nor refutes |
 
 ---
 
-**Steps**
+## Separated Outcomes
 
-1. **Infer or Confirm**
-   - experiment ID (from active experiments with evidence)
-   - resolution type (infer from evidence + success_criteria, or ask)
+V3 separates resolution into two distinct assessments:
 
-2. **Read All Evidence**
-   - mlspec/experiments/<id>/evidence/smoke.md
-   - mlspec/experiments/<id>/evidence/validation.md
-   - mlspec/experiments/<id>/evidence/final.md
+### Mechanistic Outcome
 
-3. **Show Inferred Action**
+**Question:** Does the intervention work as hypothesized?
 
-   \`\`\`
-   I'm going to resolve experiment "add-roi-cropping":
-   - Resolution: accept
-   - Evidence: validation shows +1.1% accuracy improvement
-   - Recipe to create: rf-mfcc-roi-v1
-   - Tags: candidate
+- **success**: Intervention produces expected mechanistic effect (e.g., EOS tokens produce explicit EOS in generation)
+- **failure**: Intervention does NOT produce expected mechanistic effect
+- **inconclusive**: Cannot determine mechanistic effect
 
-   Proceeding...
-   \`\`\`
+### Practical Outcome
 
-4. **Check Acceptance Warning Matrix**
+**Question:** Does the intervention provide practical utility?
 
-   | Evidence Stage | accept as candidate | accept as current-best |
-   |----------------|---------------------|-----------------------|
-   | smoke | warning | strong warning |
-   | validation | ok | normal |
-   | final | ok | strongest support |
-
-   Show warnings but allow proceed.
-
-5. **Write Resolution File**
-
-   \`\`\`bash
-   mlspec/experiments/<id>/resolution.md
-   \`\`\`
-
-   \`\`\`yaml
-   ---
-   entity_type: resolution
-   experiment_id: add-roi-cropping
-   resolution: accept
-   accepted_recipe: rf-mfcc-roi-v1
-   accepted_tags: [candidate]
-   rationale: "Validation shows +1.1% accuracy improvement with ROI cropping"
-   supporting_evidence:
-     - stage: validation
-       summary: "Accuracy 0.945 vs 0.934 base (+1.1%)"
-   created: 2026-05-01T12:00:00Z
-   ---
-   \`\`\`
-
-6. **If Accept: Create Recipe Node**
-
-   \`\`\`bash
-   # Recipe already created by mlspec accept command
-   mlspec/recipes/rf-mfcc-roi-v1/recipe.yaml
-   mlspec/recipes/rf-mfcc-roi-v1/summary.md
-   \`\`\`
-
-7. **Run mlspec-next**
-
-   After resolving, show next recommended action.
+- **positive**: Practical metrics improve sufficiently
+- **negative**: Practical metrics do NOT improve (or worsen)
+- **inconclusive**: Cannot determine practical utility
+- **variant_accepted**: Mechanistic hypothesis fails but practical utility succeeds (special case)
 
 ---
 
-**Acceptance Warning Matrix**
+## Pre-flight Gate Check
 
-When accepting, check evidence stage vs target tag:
+**Before resolving, run:**
 
-- **smoke + candidate**: "Accepting as candidate from smoke evidence is premature"
-- **smoke + current-best**: "Strong warning: accepting as current-best from smoke"
-- **validation + current-best**: Proceed normally
-- **final + current-best**: Note "Final evidence provides strongest support"
+\`\`\`bash
+mlspec resolve <experiment>
+\`\`\`
 
-Show warnings but respect user agency.
+This is a preflight gate checker. It validates:
+- No existing resolution.md
+- A can_resolve=true rung has evidence
+
+If the gate check fails, the CLI will error. Fix the issue before proceeding.
 
 ---
 
-**Output Format**
+## Steps
+
+### 1. Infer or Confirm
+
+- experiment ID (from active experiments with evidence)
+- resolution type (infer from outcomes, or ask)
+
+### 2. Read Evidence from can_resolve Rung
+
+Find the rung with can_resolve=true in protocol.md:
+- Read evidence/<rung>.md
+- Extract comparison metrics
+
+### 3. Assess Mechanistic Outcome
+
+Based on the hypothesis in hypothesis.md and evidence:
+
+| Evidence Shows | Mechanistic Outcome |
+|---------------|-------------------|
+| Intervention produces expected effect | success |
+| Intervention does NOT produce expected effect | failure |
+| Cannot determine | inconclusive |
+
+### 4. Assess Practical Outcome
+
+Based on comparison metrics vs success_criteria:
+
+| Comparison Result | Practical Outcome |
+|------------------|-------------------|
+| Metrics improve sufficiently | positive |
+| Metrics do NOT improve (or worsen) | negative |
+| Cannot determine | inconclusive |
+| Mechanistic=failure BUT practical=positive | variant_accepted |
+
+### 5. Determine Resolution
+
+| Mechanistic | Practical | Resolution |
+|-------------|-----------|------------|
+| success | positive | accept |
+| success | negative | reject |
+| success | inconclusive | hold |
+| failure | positive | accept (variant_accepted) |
+| failure | negative | reject |
+| failure | inconclusive | reject |
+| inconclusive | positive | hold |
+| inconclusive | negative | reject |
+| inconclusive | inconclusive | inconclusive → hold |
+
+### 6. Show Inferred Action
+
+\`\`\`
+I'm going to resolve experiment "add-eos-tokens":
+- Rung: validation (can_resolve=true)
+- Mechanistic outcome: failure (EOS tokens do NOT produce explicit EOS)
+- Practical outcome: positive (perplexity improves)
+- Resolution: accept (variant_accepted)
+
+Proceeding...
+\`\`\`
+
+### 7. Write resolution.md
+
+\`\`\`yaml
+---
+entity_type: resolution
+schema: ml-experiment-v3
+experiment_id: add-eos-tokens
+resolution: accept
+mechanistic_outcome:
+  hypothesis: "EOS tokens will produce explicit EOS in generation"
+  result: failure
+  evidence_ref: evidence/validation.md
+  notes: "Generated text does not show explicit EOS patterns"
+practical_outcome:
+  hypothesis: "Perplexity improves with EOS tokens"
+  result: variant_accepted
+  evidence_ref: evidence/validation.md
+  notes: "Perplexity improves despite mechanistic failure"
+decision_rationale: "While the mechanistic hypothesis failed (EOS tokens don't produce explicit EOS), practical utility is positive (perplexity improves by 5%). Accepting as variant_accepted."
+supporting_evidence:
+  - rung: validation
+    comparison_metric: perplexity
+    baseline_value: 12.3
+    treatment_value: 11.7
+    delta: -0.6
+created: 2026-05-01T12:00:00Z
+---
+\`\`\`
+
+### 8. Update Experiment Status
+
+After writing resolution.md:
+- Update experiment.yaml status to resolved
+- This is done by the skill, NOT by CLI
+
+### 9. Run mlspec validate
+
+After resolving, validate the resolution:
+\`\`\`bash
+mlspec validate
+\`\`\`
+
+---
+
+## Output Format
 
 ### Success
 
 \`\`\`
-## Experiment Resolved: add-roi-cropping
+## Experiment Resolved: add-eos-tokens
 
-### Resolution: ACCEPT
+### Resolution: ACCEPT (variant_accepted)
 
-### Created Recipe
-- **ID**: rf-mfcc-roi-v1
-- **Parent**: rf-mfcc-v1
-- **Tags**: [candidate]
-- **Evidence**: validation (+1.1% accuracy)
+### Mechanistic Outcome: FAILURE
+- Hypothesis: EOS tokens produce explicit EOS in generation
+- Result: Failure - generated text does not show explicit EOS patterns
+
+### Practical Outcome: POSITIVE
+- Hypothesis: Perplexity improves with EOS tokens
+- Result: Positive - perplexity improves by 5% (12.3 → 11.7)
+
+### Decision Rationale
+While the mechanistic hypothesis failed, practical utility is positive.
+Accepting as variant_accepted.
 
 ### Supporting Evidence
-- validation: Accuracy 0.945 vs 0.934 base (+1.1%)
+| Rung | Metric | Baseline | Treatment | Delta |
+|------|--------|----------|-----------|-------|
+| validation | perplexity | 12.3 | 11.7 | -0.6 (-5%) |
 
 ---
 
-Next recommended action:
-\`\`\`
-
-Then run /mlspec-next to show what to do next.
+Next: /mlspec-next
 \`\`\`
 
 ### Blocked: Already Resolved
@@ -182,31 +225,74 @@ It cannot be resolved again.
 
 **Current status:**
 - Resolution: see \`mlspec/experiments/<id>/resolution.md\`
-- Recipe: <recipe_id> (if accepted)
 
 **What to do:**
 - Use /mlspec-next to find other actions
-- Use /mlspec-run to collect more evidence if needed
 \`\`\`
 
-### Blocked: Evidence Conflict
+### Blocked: No Resolvable Evidence
 
 \`\`\`
-## Resolution Blocked: Evidence Conflict
+## Resolution Blocked: No Resolvable Evidence
 
-Evidence stages have conflicting recommendations:
+No rung with can_resolve=true has evidence yet.
 
-| Stage | Recommendation |
-|-------|---------------|
-| smoke | accept |
-| validation | reject |
+**Can_resolve rungs:**
+- pilot: NO evidence
+- validation: NO evidence
 
-**Options:**
-1. **Proceed anyway** - Accept the conflict and resolve with user-provided rationale
-2. **Collect more evidence** - Run /mlspec-run to clarify
-3. **Cancel** - Stop and reconsider
+**What to do:**
+- Collect evidence for a can_resolve rung: /mlspec-run <experiment> validation
+\`\`\`
 
-What would you like to do?
+### Blocked: Resolution Exists
+
+\`\`\`
+## Resolution Blocked: Resolution Exists
+
+resolution.md already exists for this experiment.
+
+**What to do:**
+- View existing resolution: cat mlspec/experiments/<id>/resolution.md
+- Use /mlspec-next to find other actions
+\`\`\`
+
+---
+
+## CLI vs Skill Boundary
+
+**CLI (mlspec resolve) does:**
+- Validates no existing resolution.md
+- Validates can_resolve=true rung has evidence
+- Returns exit code based on gate check
+
+**Skill does:**
+- Reads evidence and assesses outcomes
+- Writes resolution.md
+- Updates experiment.yaml status to resolved
+
+**CLI never:**
+- Invokes skills
+- Assesses outcomes
+- Writes resolution files
+
+---
+
+## Variant Accepted Case
+
+When mechanistic hypothesis fails but practical utility succeeds:
+
+1. Set mechanistic_outcome.result: failure
+2. Set practical_outcome.result: variant_accepted (NOT positive)
+3. Set resolution: accept
+4. Explain the divergence in decision_rationale
+
+Example:
+\`\`\`
+While the mechanistic hypothesis failed (EOS tokens don't produce explicit EOS),
+the practical utility is positive (perplexity improves by 5%).
+Accepting as variant_accepted - the intervention works even though the
+specific mechanism is different than hypothesized.
 \`\`\`
 
 ---
@@ -214,100 +300,102 @@ What would you like to do?
 **Boundaries**
 
 **Must Do:**
-- Read all evidence files
-- Write resolution.md
-- If accept: create recipe node
-- Run mlspec-next after resolving
+- Read evidence from can_resolve=true rung
+- Assess mechanistic outcome separately from practical outcome
+- Write resolution.md with separated outcomes
+- Update experiment.yaml status to resolved
+- Run mlspec validate after resolving
 
 **Forbidden:**
 - Run training
-- Brainstorm unrelated ideas
-- Auto-archive
+- Create evidence files
+- Modify protocol.md
 `,
     license: 'MIT',
-    compatibility: 'Requires MLSpec v2 workspace',
-    metadata: { author: 'mlspec', version: '2.0' },
+    compatibility: 'Requires MLSpec v3 workspace with protocol.md and evidence',
+    metadata: { author: 'mlspec', version: '3.0' },
   };
 }
 
 export function getMlspecResolveCommandTemplate(): CommandTemplate {
   return {
     name: 'MLSpec: Resolve Experiment',
-    description: 'Resolve an experiment (accept, reject, retry, hold, inconclusive) based on evidence.',
+    description: 'Resolve an experiment using separated mechanistic and practical outcomes.',
     category: 'Workflow',
-    tags: ['workflow', 'mlspec', 'ml', 'experiment', 'resolve'],
+    tags: ['workflow', 'mlspec', 'ml', 'experiment', 'resolve', 'v3'],
     content: `Resolve an experiment based on evidence.
 
-This skill resolves an experiment and creates a resolution document.
+This skill resolves an experiment using separated mechanistic and practical outcomes.
 
 ---
 
-**Pause if:**
-- Experiment already resolved → blocked state
-- Evidence conflict → blocked state
+**Pre-flight gate check:**
+
+Run \`mlspec resolve <experiment>\` to validate:
+- No existing resolution.md
+- can_resolve=true rung has evidence
 
 ---
 
-**Pre-flight Checks**
+**Separated Outcomes:**
 
-1. Run \`mlspec status --experiment <id> --json\` to check experiment status
-2. Run \`mlspec show evidence <id> --json\` to check evidence stages and recommendations
-3. Check for evidence conflicts across stages
-
-If JSON commands fail, fall back to file inspection.
+| Outcome | Result |
+|---------|--------|
+| Mechanistic | success / failure / inconclusive |
+| Practical | positive / negative / inconclusive / variant_accepted |
 
 ---
 
-**Resolution Types**
+**Resolution Matrix:**
 
-| Type | Action |
-|------|--------|
-| accept | Create new recipe |
-| reject | End experiment |
-| retry | Return to running |
-| hold | Pause for later |
-| inconclusive | Evidence unclear |
+| Mechanistic | Practical | Resolution |
+|-------------|-----------|------------|
+| success | positive | accept |
+| success | negative | reject |
+| failure | positive | accept (variant_accepted) |
+| failure | negative | reject |
+| inconclusive | any | hold |
 
 ---
 
 **Steps**
 
 1. **Infer/Confirm** experiment and resolution type
-2. **Pre-flight checks** (status, evidence, conflicts)
-3. **Read All Evidence** - smoke, validation, final
-4. **Show Inferred Action**
-5. **Write resolution.md**
-6. **If accept**: Create recipe node
-7. **Run /mlspec-next**
+2. **Run preflight gate check** (mlspec resolve)
+3. **Read evidence** from can_resolve=true rung
+4. **Assess mechanistic outcome** (success/failure/inconclusive)
+5. **Assess practical outcome** (positive/negative/inconclusive/variant_accepted)
+6. **Write resolution.md** with separated outcomes
+7. **Update experiment.yaml status** to resolved
+8. **Run mlspec validate**
 
 ---
 
 **Blocked State: Already Resolved**
 
-Experiment is already resolved. Use /mlspec-next.
+Use /mlspec-next.
 
 ---
 
-**Blocked State: Evidence Conflict**
+**Blocked State: No Resolvable Evidence**
 
-Evidence stages have conflicting recommendations.
-Options: proceed anyway / collect more evidence / cancel
+Collect evidence for a can_resolve rung first.
 
 ---
 
-**Acceptance Warnings**
+**Variant Accepted:**
 
-| Stage | → candidate | → current-best |
-|-------|-------------|---------------|
-| smoke | warning | strong |
-| validation | ok | normal |
-| final | ok | strongest |
+When mechanistic=failure but practical=positive:
+- Set practical.result: variant_accepted
+- Set resolution: accept
+- Explain divergence in decision_rationale
 
 ---
 
 **Boundaries**
 
-**Allowed:** Write resolution, create recipe (if accept)
-**Forbidden:** Run training, brainstorm`,
+**Allowed:** Assess outcomes, write resolution
+**Forbidden:** Run training, modify protocol
+`,
   };
 }

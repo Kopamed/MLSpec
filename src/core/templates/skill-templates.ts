@@ -19,9 +19,10 @@ export { getOnboardSkillTemplate, getOpsxOnboardCommandTemplate } from './workfl
 export { getOpsxProposeSkillTemplate, getOpsxProposeCommandTemplate } from './workflows/propose.js';
 export { getFeedbackSkillTemplate } from './workflows/feedback.js';
 
-// MLSpec V2 Skills (replacing V1)
+// MLSpec V3 Skills
 export { getMlspecExploreSkillTemplate, getMlspecExploreCommandTemplate } from './workflows/mlspec-explore.js';
 export { getMlspecProposeSkillTemplate, getMlspecProposeCommandTemplate } from './workflows/mlspec-propose.js';
+export { getMlspecPrepareSkillTemplate, getMlspecPrepareCommandTemplate } from './workflows/mlspec-prepare.js';
 export { getMlspecRunSkillTemplate, getMlspecRunCommandTemplate } from './workflows/mlspec-run.js';
 export { getMlspecResolveSkillTemplate, getMlspecResolveCommandTemplate } from './workflows/mlspec-resolve.js';
 export { getMlspecNextSkillTemplate, getMlspecNextCommandTemplate } from './workflows/mlspec-next.js';

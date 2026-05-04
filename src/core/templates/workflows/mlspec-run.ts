@@ -1,7 +1,7 @@
 /**
- * MLSpec Run Skill Template
+ * MLSpec Run Skill Template (V3)
  *
- * Skill for running or recording evidence for experiments.
+ * Skill for collecting evidence for experiments using rung-based evidence ladder.
  */
 import type { SkillTemplate, CommandTemplate } from "../types.js";
 
@@ -9,193 +9,198 @@ export function getMlspecRunSkillTemplate(): SkillTemplate {
   return {
     name: "mlspec-run",
     description:
-      "Run or record evidence for an experiment at a specific stage (smoke, validation, final). Infers experiment ID and stage from context.",
-    instructions: `Run or record evidence for an experiment.
+      "Collect evidence for an experiment at a specific rung (pilot, validation, etc.). Uses rung-based evidence ladder from protocol.md.",
+    instructions: `Collect evidence for an experiment at a specific rung.
 
-This skill records evidence for an experiment at a specific stage. It infers the experiment ID and stage from workspace state and conversation context.
+This skill collects evidence for an experiment using the rung-based evidence ladder defined in protocol.md. It replaces the old stage-based (smoke/validation/final) evidence collection.
+
+---
+
+## Prerequisites
+
+- prepare.md exists with status=ready
+- protocol.md defines the evidence ladder
+- You have reviewed protocol.md and understand the target rung
 
 ---
 
 **Pause if:**
-- Evidence file already exists for the target stage → output blocked state with overwrite/skip options
-- Base recipe has no metrics → "Cannot compare results without baseline metrics."
+- prepare.md does not exist or status!=ready → "Run /mlspec-prepare first"
+- Evidence file already exists for the target rung → output blocked state with overwrite/skip options
+- Rung not found in protocol.md → "Rung '<rung>' not found in protocol.evidence_ladder"
 - User provides unclear or incomplete results → ask for clarification
 
 ---
 
-## BASELINE EVALUATION MODE (EVALUATION WORK, NOT EXPERIMENT EVIDENCE)
+## Evidence Collection Steps
 
-**IMPORTANT**: Baseline establishment is EVALUATION work that updates \`mlspec/recipes/<id>/recipe.yaml\` top-level \`metrics\` field. It is NOT experiment evidence work. Do NOT create evidence files for baseline evaluation.
+### 1. Infer or Confirm Target Rung
 
-**FIRST**: Check if experiments exist in \`mlspec/experiments/\`.
+- experiment ID (from context, conversation, or ask)
+- rung ID (from evidence ladder or ask)
+- Confirm the rung exists in protocol.md
 
-If no experiments exist but baseline recipe(s) exist, enter **baseline evaluation mode**:
+**Rung Inference Rules:**
 
-### Baseline Evaluation Steps (Evaluation Work)
+| Evidence State | Default Rung |
+|----------------|--------------|
+| No evidence yet | First rung in ladder |
+| Some rungs complete | Next incomplete rung |
+| All rungs complete | Ask (experiment may be ready for resolution) |
 
-1. **Identify Baseline Recipe**
-   - Find recipe with current-best tag
-   - If no current-best tag, use the baseline-tagged recipe
-   - If multiple baseline recipes, infer or ask which to evaluate
-
-2. **Check for Existing Metrics**
-   - If baseline already has metrics: suggest they are established and recommend /mlspec-propose
-   - If baseline has no metrics: offer to run evaluation
-
-3. **Show Inferred Action**
-
-   \`\`\`
-   I'm going to evaluate the baseline recipe:
-   - Recipe: <baseline-id>
-   - Goal: Establish baseline metrics for comparison
-
-   Proceeding...
-   \`\`\`
-
-4. **Record Baseline Metrics**
-   - Update mlspec/recipes/<id>/recipe.yaml top-level \`metrics\` field
-   - May update mlspec/recipes/<id>/summary.md
-   - Must NOT create experiment evidence files (those go under mlspec/experiments/<id>/evidence/)
-
-5. **Baseline Evaluation Output Format**
-
-   \`\`\`
-   ## Baseline Evaluation Complete: <baseline-id>
-
-   ### Metrics Established
-   | Metric | Value |
-   |--------|-------|
-   | accuracy | 0.934 |
-   | f1 | 0.921 |
-
-   ### Summary
-   <Brief summary of baseline behavior>
-
-   ### Next Steps
-   1. Propose first experiment: /mlspec-propose <experiment-id> --from <baseline-id>
-   2. Explore alternatives: /mlspec-explore
-
-   Next: /mlspec-propose
-   \`\`\`
-
----
-
-## EXPERIMENT EVIDENCE MODE (EXPERIMENT WORK)
-
-**IMPORTANT**: This mode creates evidence files at \`mlspec/experiments/<id>/evidence/<stage>.md\`. This is experiment work, not baseline evaluation.
-
-(When experiments exist, proceed with normal evidence recording below)
-
-**Input**: Optional experiment ID and/or stage.
-
----
-
-**Stage Inference Rules**
-
-| Evidence State | Default Stage |
-|----------------|---------------|
-| No evidence yet | smoke |
-| smoke exists, no validation | validation |
-| validation exists | ask (could be more validation or final) |
-| final exists | ask (experiment may be ready for resolution) |
-
----
-
-**Steps**
-
-1. **Infer or Confirm**
-   - experiment ID (from context, conversation, or ask)
-   - stage (from evidence state or ask)
-   - Confirm base_recipe and proposed_change match intent
-
-2. **Show Inferred Action**
-
-   \`\`\`
-   I'm going to record evidence for experiment "add-roi-cropping":
-   - Stage: validation
-   - Base: rf-mfcc-v1
-   - Proposed change: Add ROI cropping
-
-   Proceeding...
-   \`\`\`
-
-3. **Before Recording Evidence**
-
-   **Pre-flight Check (use JSON if available):**
-
-   Run: \`mlspec status --experiment <id> --json\`
-
-   If JSON output is available, use it to determine:
-   - \`missing_stages\`: Array of stages that have no evidence yet
-   - \`ready_to_resolve\`: Whether the experiment has recommendations and is ready to resolve
-   - \`evidence_stages.<stage>.exists\`: Whether evidence for this stage exists
-
-   If JSON command fails, fall back to file inspection:
-   - Path: \`mlspec/experiments/<id>/evidence/<stage>.md\`
-   - If exists: CLI will fail with "Evidence at stage '<stage>' already exists"
-
-   **If evidence exists:**
-   Output blocked state (see below).
-   Do NOT call \`mlspec add-evidence\`.
-
-   **If evidence does not exist:**
-   Proceed with recording.
-
-4. **Run or Record**
-
-   Option A: Run actual training
-   \`\`\`bash
-   # Run your training command
-   python train.py --config mlspec/recipes/rf-mfcc-v1/config.yaml --modifications roi-cropping
-   \`\`\`
-
-   Option B: Record existing results
-   \`\`\`bash
-   mlspec add-evidence <experiment> --stage <stage> --metrics '{"accuracy": 0.945}'
-   \`\`\`
-
-5. **Update Evidence File**
-   - Read experiment.yaml and hypothesis.md
-   - Create/update mlspec/experiments/<id>/evidence/<stage>.md
-   - Record runs, metrics, artifacts
-   - Set recommendation based on results
-
-6. **Show Summary**
-
-   \`\`\`
-   ## Evidence Recorded: add-roi-cropping (validation)
-
-   ### Results
-   | Seed | Accuracy | F1 |
-   |------|----------|-----|
-   | 42 | 0.945 | 0.932 |
-   | 43 | 0.942 | 0.929 |
-   | 44 | 0.947 | 0.934 |
-
-   ### Aggregate
-   - Accuracy: 0.945 ± 0.002
-   - F1: 0.932 ± 0.002
-
-   ### Comparison to Base (rf-mfcc-v1)
-   - Accuracy: +1.1% (0.934 -> 0.945)
-   - F1: +0.8% (0.924 -> 0.932)
-
-   ### Recommendation
-   Positive signal! Consider proceeding to final or resolving.
-
-    Next: /mlspec-resolve add-roi-cropping
-    \`\`\`
-
-### Blocked: Evidence Exists
+### 2. Show Inferred Action
 
 \`\`\`
-## Evidence Recording Blocked
+I'm going to collect evidence for experiment "add-eos-tokens":
+- Rung: validation
+- Base: baseline-v1
+- Treatment: eos-token-v1
+- Budget: 1M tokens
 
-Evidence at stage '<stage>' already exists for experiment '<id>'.
+Proceeding...
+\`\`\`
+
+### 3. Pre-flight Gate Check
+
+**Before collecting evidence, run:**
+
+\`\`\`bash
+mlspec run <experiment> <rung>
+\`\`\`
+
+This is a preflight gate checker. It validates:
+- prepare.md exists with status=ready
+- Rung exists in protocol.evidence_ladder
+- evidence/<rung>.md does not already exist
+
+If the gate check fails, the CLI will error. Fix the issue before proceeding.
+
+### 4. Train Baseline Arm (if required)
+
+**Check protocol.md for baseline requirements:**
+- If \`baseline_requirements.<rung>.required: true\` and no existing baseline:
+  - Train baseline_arm per rung config
+- If \`baseline_arm.recipe_ref\` exists: use that recipe
+- If \`train_from_scratch: true\`: train from scratch
+
+**Run baseline training:**
+\`\`\`bash
+python train.py --config configs/train.yaml --recipe baseline-v1 --output outputs/baseline-validation/
+\`\`\`
+
+### 5. Train Treatment Arm
+
+**Run treatment training:**
+\`\`\`bash
+python train.py --config configs/train.yaml --recipe eos-token-v1 --output outputs/treatment-validation/
+\`\`\`
+
+### 6. Run Benchmark on Both Arms
+
+\`\`\`bash
+python scripts/evaluate.py --experiment validation --dataset test
+\`\`\`
+
+### 7. Compute Comparison Metrics
+
+If rung.comparison.comparison_required is true:
+- Compute comparison_metric between baseline and treatment
+- Calculate delta and delta_percent
+- Check against success_threshold
+
+### 8. Write evidence/<rung>.md
+
+Create the evidence file with this structure:
+
+\`\`\`yaml
+---
+entity_type: evidence
+schema: ml-experiment-v3
+experiment_id: add-eos-tokens
+rung: validation
+budget:
+  model_params: 124M
+  training_tokens: 1000000
+baseline_arm:
+  recipe_ref: baseline-v1
+  runs:
+    - seed: 42
+      command: python train.py ...
+      completed: 2026-05-01T12:30:00Z
+      duration_minutes: 45
+      metrics:
+        loss: 2.34
+        accuracy: 0.823
+treatment_arm:
+  recipe_ref: eos-token-v1
+  runs:
+    - seed: 42
+      command: python train.py ...
+      completed: 2026-05-01T13:15:00Z
+      duration_minutes: 45
+      metrics:
+        loss: 2.28
+        accuracy: 0.831
+aggregate:
+  baseline:
+    loss: { mean: 2.34, std: 0.02 }
+    accuracy: { mean: 0.823, std: 0.005 }
+  treatment:
+    loss: { mean: 2.28, std: 0.02 }
+    accuracy: { mean: 0.831, std: 0.005 }
+comparison:
+  comparison_metric: accuracy
+  baseline_value: 0.823
+  treatment_value: 0.831
+  delta: 0.008
+  delta_percent: 0.97
+  success: true
+abort_criteria_evaluation: []
+---
+
+## Evidence Summary
+
+[Detailed evidence body with dataset profile, training logs, etc.]
+\`\`\`
+
+### 9. Update Experiment Status
+
+**When first evidence is written for a draft experiment:**
+- Update experiment.yaml status to running
+- This is done by the skill, NOT by CLI
+
+### 10. Show Summary
+
+\`\`\`
+## Evidence Collected: add-eos-tokens (validation)
+
+### Results
+| Arm | Seed | Loss | Accuracy |
+|-----|------|------|----------|
+| Baseline | 42 | 2.34 | 0.823 |
+| Treatment | 42 | 2.28 | 0.831 |
+
+### Comparison
+- Accuracy: +0.8% (0.823 → 0.831)
+- Success threshold met: YES
+
+### Next Steps
+- Collect evidence for next rung: /mlspec-run add-eos-tokens validation
+- Or resolve experiment: /mlspec-resolve add-eos-tokens
+\`\`\`
+
+---
+
+## Blocked: Evidence Exists
+
+\`\`\`
+## Evidence Collection Blocked
+
+Evidence for rung '<rung>' already exists for experiment '<id>'.
 The CLI will fail if you try to overwrite.
 
 **Options:**
-1. **Overwrite** - Delete existing evidence file and record new results
+1. **Overwrite** - Delete existing evidence file and collect new results
 2. **Skip** - Use existing evidence and take no action
 3. **Cancel** - Stop and use /mlspec-next to find other actions
 
@@ -204,316 +209,59 @@ What would you like to do?
 
 ---
 
-**Evidence File Structure**
-
-Each evidence file (smoke.md, validation.md, final.md) contains:
-
-\`\`\`yaml
----
-entity_type: evidence
-experiment_id: add-roi-cropping
-stage: validation
-created: 2026-05-01T12:00:00Z
-runs:
-  - seed: 42
-    command: python train.py ...
-    completed: 2026-05-01T12:30:00Z
-    duration_minutes: 30
-    metrics:
-      accuracy: 0.945
-      f1: 0.932
-aggregate:
-  accuracy:
-    mean: 0.945
-    std: 0.002
-  f1:
-    mean: 0.932
-    std: 0.002
-summary: "ROI cropping improves accuracy by ~1%"
-recommendation: accept
----
-
-## Evidence Summary
-...
-\`\`\`
-
----
-
-## Run-Readiness: Dataset Profiling
-
-Before recording evidence for full training runs (not smoke), ensure dataset profiling is documented in the evidence body.
-
-### Dataset Profiling Checklist
-
-Before full training runs, estimate the compute/data budget and verify it is appropriate for the model and task.
-
-In the evidence Markdown body, include a section like:
-
-\`\`\`markdown
-## Dataset Profile
-
-- raw_examples: <count>
-- raw_token_count: <count>
-- generated_sequences: <count after tokenization/chunking>
-- generated_tokens: <count>
-- seq_len: <e.g., 256, 512, 1024>
-- chunking_strategy: <e.g., first, random, sliding-window>
-- packing_strategy: <e.g., none, greedy, sorted>
-- avg_raw_tokens_per_example: <average tokens per raw example>
-- tokens_per_epoch: <estimated tokens per epoch>
-- planned_training_tokens: <tokens_per_epoch * num_epochs>
-
-### Compute/Data Budget Estimate
-
-Before running full training, estimate and document:
-
-- **Estimated data units**: <count of rows, sequences, or tokens>
-- **Effective batch size**: <actual batch size considering gradient accumulation>
-- **Planned training units**: <steps, epochs, or tokens>
-- **Estimated runtime**: <wall-clock time estimate>
-- **Is this scale appropriate for the model and task?**: <yes/no with reasoning>
-
-If the scale seems inappropriate (e.g., too many epochs for the dataset size, or insufficient data for the model size), flag this before proceeding.
-
-### Dataset Efficiency Metrics
-
-- generated_tokens / raw_token_count: <retention ratio>
-- dropped_token_ratio: <tokens lost to chunking/packing>
-- padding_ratio: <fraction of sequence that is padding>
-- avg_tokens_per_sequence: <generated_tokens / generated_sequences>
-- sequence_utilization: <avg_tokens_per_sequence / seq_len>
-\`\`\`
-
-### TinyStories Anomaly Detection
-
-If avg_raw_tokens_per_example is 50-70 tokens with seq_len=256, flag:
-> "High chunking overhead: avg example 50-70 tokens with seq_len=256 means most of sequence is padding"
-
-If generated_tokens is much smaller than raw_token_count (e.g., < 0.3x), flag:
-> "Suspiciously low generated_tokens relative to raw_token_count - verify chunking/packing is intentional"
-
----
-
-## Run-Readiness: Accelerator Preflight
-
-Before running training, check accelerator availability:
-
-- CUDA availability and GPU count
-- ROCm availability and GPU count
-- MPS (Apple Silicon) availability
-- CPU-only fallback
-- dtype support: bf16, fp16, fp32
-
-### Full Training Requires Accelerator
-
-If full training is requested and no accelerator is available:
-> "Full training on CPU is not recommended; use smoke stages only or explicitly acknowledge CPU intent"
-
-### Smoke Stages on CPU
-
-Smoke-import and smoke-onebatch may proceed on CPU with explicit user acknowledgment.
-
----
-
-## Run-Readiness: Training Ladder
-
-For evidence body, include training ladder checklist:
-
-\`\`\`markdown
-## Training Ladder
-
-- [ ] smoke-import: completed (N steps)
-- [ ] smoke-onebatch: completed (N steps)
-- [ ] smoke-tinyoverfit: completed (N steps, overfit_loss=X)
-- [ ] checkpoint-short: completed (path: ...)
-- [ ] resume-checkpoint: completed
-- [ ] full-run: completed (max_steps=N, max_tokens=N)
-\`\`\`
-
-Full-run evidence requires earlier ladder stages to be completed.
-
----
-
-## Run-Readiness: Durable Execution
-
-For nontrivial or repeated commands, prefer durable scripts and configs over inline snippets:
-
-- **Use scripts**: \`scripts/train.py\`, \`scripts/evaluate.py\`, \`scripts/preprocess.py\`
-- **Use configs**: \`configs/config.yaml\`, \`configs/training.yaml\` instead of hardcoded values
-- **Reusable preprocessing**: Save preprocessing scripts for reuse across runs
-
-**Principle**: If the command is nontrivial or will be repeated, make it a script. Inline snippets are acceptable only for quick exploration.
-
-**Artifact Lifecycle**:
-- **Durable project artifacts** (version-controlled): Reusable scripts, configs, preprocessing code, tokenizer definitions. Store outside \`mlspec/\`.
-- **Runtime artifacts** (NOT version-controlled): \`outputs/<run-id>/logs\`, \`outputs/<run-id>/cache\`, \`outputs/<run-id>/checkpoints\`.
-- **MLSpec artifacts**: \`mlspec/recipes/\` (metrics), \`mlspec/experiments/<id>/evidence/\` (evidence), \`mlspec/findings/\` (findings/resolutions).
-
----
-
-## Run-Readiness: Live Logging
-
-When running training, use live logging with tee:
-
-- Recommended: Pipe output through \`tee outputs/<experiment-id>/logs/training.log\`
-- NOT recommended: \`| tail -30\` or tail-only patterns
-
-Create log directory before training: \`outputs/<experiment-id>/logs/\` (runtime-only, not version-controlled)
-
----
-
-## Run-Readiness: Preprocessing Cache
-
-In the evidence body, document preprocessing cache:
-
-\`\`\`markdown
-## Preprocessing Cache
-
-- cache_key: <hash-of-data-and-preprocessing>
-- cache_valid: true/false
-- data_hash: <hex-string>
-- preprocessing_version: <version-string>
-- cache_location: outputs/<experiment-id>/cache/
-\`\`\`
-
-Cache artifacts are runtime-only state; do not commit to version control.
-
----
-
-## Target-Leakage Sanity Check
-
-Before accepting training evidence, verify autoregressive training is correctly shifted.
-
-### Label Shift Check
-
-Evidence Markdown body SHALL include one of:
-- \`autoregressive_shift_verified: true\` with verification method description
-- \`autoregressive_shift_not_applicable: true\` with reason
-
-### Causal LM Verification
-
-When claiming \`autoregressive_shift_verified: true\`, document the verification method:
-
-**Code review:** Cite specific file and line where loss is computed, the slice used (\`logits[:, :-1, :]\` vs \`logits[:, 1:, :]\`), confirmation that input_ids is shifted correctly.
-
-**Unit test:** Include test name/location, verify with input_ids \`[A, B, C, D]\` loss at position 0 is computed against token B not A, test output showing loss is non-zero on shifted targets.
-
-### Near-Zero Loss Warning
-
-If training loss drops below 0.01:
-> "Near-zero loss detected. Verify autoregressive shift is correct."
-
-Include \`loss_sanity_note\` in evidence explaining why loss is reasonable.
-
-### Loss-Generation Consistency
-
-If loss is near-zero AND generation collapse metrics indicate bad generation:
-> "SANITY CHECK FAILED: Near-zero loss with bad generation indicates possible target-leakage"
-
-The skill SHALL stop and require an investigation note before writing/accepting evidence.
-
-With investigation note, evidence MAY be recorded with \`sanity_override: true\`.
-
----
-
-## Task-Appropriate Evaluation Checks
-
-Evidence MUST include task-appropriate sanity/quality checks beyond a single scalar metric.
-
-### Generative Tasks (e.g., language modeling, image generation)
-
-\`\`\`markdown
-## Task Evaluation: Generative
-
-- repetition_rate: <ratio of repeated n-grams>
-- distinct_1: <ratio of unique unigrams to total tokens>
-- distinct_2: <ratio of unique bigrams to total tokens>
-- max_token_run: <longest run of repeated tokens>
-- punctuation_only_ratio: <ratio of punctuation-only tokens>
-- special_token_ratio: <ratio of special tokens>
-- top_token_frequency: <frequency of most common token>
-\`\`\`
-
-**Warning Thresholds**:
-- repetition_rate > 0.3: "High repetition detected"
-- distinct_1 < 0.3: "Low vocabulary diversity"
-- max_token_run > 10: "Long repeated token run detected"
-
-**Collapse Threshold**: If repetition_rate > 0.7 OR distinct_1 < 0.1 OR max_token_run > 50:
-> "Generation collapse detected"
-
-The skill SHALL stop and require an investigation note before writing/accepting evidence.
-
-**Samples**: Include samples from 3-5 fixed prompts. Document prompts for reproducibility.
-
-### Classification Tasks
-
-\`\`\`markdown
-## Task Evaluation: Classification
-
-- per_class_metrics: <accuracy/f1 per class>
-- confusion_matrix_summary: <key error patterns>
-- class_balanced_accuracy: <if classes are imbalanced>
-\`\`\`
-
-### Ranking Tasks
-
-\`\`\`markdown
-## Task Evaluation: Ranking
-
-- ndcg: <normalized discounted cumulative gain>
-- mrr: <mean reciprocal rank>
-- precision_at_k: <precision at k>
-\`\`\`
-
-### Detection Tasks
-
-\`\`\`markdown
-## Task Evaluation: Detection
-
-- map: <mean average precision>
-- error_analysis: <common failure modes by category>
-\`\`\`
-
-**Principle**: Evidence must include task-appropriate sanity/quality checks. Do not rely on a single scalar metric.
+## CLI vs Skill Boundary
+
+**CLI (mlspec run) does:**
+- Validates prepare.md status=ready
+- Validates rung exists in protocol.evidence_ladder
+- Checks evidence/<rung>.md doesn't already exist
+
+**Skill does:**
+- All ML work (training, benchmarking, metrics)
+- Writing evidence/<rung>.md
+- Updating experiment.yaml status to running
+
+**CLI never:**
+- Invokes skills
+- Trains models
+- Writes evidence files
 
 ---
 
 **Boundaries**
 
-**Baseline Evaluation Mode (no experiments):**
-- Updates: mlspec/recipes/<id>/recipe.yaml top-level \`metrics\` field
-- May update: mlspec/recipes/<id>/summary.md
-- Forbidden: Create experiment evidence files (those go under mlspec/experiments/<id>/evidence/)
-
-**Normal Mode (experiments exist):**
 **Must Do:**
-- Read experiment.yaml and hypothesis.md
-- Confirm base_recipe and proposed_change
-- Create/update evidence/<stage>.md
-- Record metrics, artifacts, runs
+- Read protocol.md to understand rung structure
+- Verify prepare.md status=ready before proceeding
+- Train baseline_arm if required (or use existing)
+- Train treatment_arm
+- Run benchmark on both arms
+- Compute comparison metrics
+- Write evidence/<rung>.md
+- Update experiment.yaml status to running
 
 **Forbidden:**
-- Accept/reject/retry/hold/inconclusive
+- Resolve/accept/reject (use /mlspec-resolve)
 - Create recipe nodes
 - Tag current-best
+- Skip prepare stage
 
 ---
 
 **When Ambiguous**
 
-If multiple experiments or stages are plausible, ask one question:
+If multiple experiments or rungs are plausible, ask one question:
 \`\`\`
 I see two active experiments:
-1. add-roi-cropping (smoke complete, needs validation)
-2. tune-n-estimators (draft, no evidence)
+1. add-eos-tokens (pilot complete, needs validation)
+2. add-roi-cropping (draft, needs prepare)
 
-Which experiment should I record evidence for?
+Which experiment should I collect evidence for?
 \`\`\`
 `,
     license: "MIT",
-    compatibility: "Requires MLSpec v2 workspace",
-    metadata: { author: "mlspec", version: "2.0" },
+    compatibility: "Requires MLSpec v3 workspace with protocol.md and prepare.md",
+    metadata: { author: "mlspec", version: "3.0" },
   };
 }
 
@@ -521,60 +269,47 @@ export function getMlspecRunCommandTemplate(): CommandTemplate {
   return {
     name: "MLSpec: Run Evidence",
     description:
-      "Run or record evidence for an experiment at smoke, validation, or final stage.",
+      "Collect evidence for an experiment at a specific rung using the evidence ladder.",
     category: "Workflow",
-    tags: ["workflow", "mlspec", "ml", "experiment", "run", "evidence"],
-    content: `Run or record evidence for an experiment.
+    tags: ["workflow", "mlspec", "ml", "experiment", "run", "evidence", "v3"],
+    content: `Collect evidence for an experiment at a specific rung.
 
-This skill records evidence at a specific stage (smoke/validation/final).
+This skill uses rung-based evidence collection (pilot, validation, etc.) from protocol.md.
 
 ---
 
 **Pause if:**
+- prepare.md does not exist or status!=ready → Run /mlspec-prepare first
 - Evidence file already exists → blocked state (overwrite/skip/cancel)
-- Base recipe has no metrics → "Cannot compare without baseline metrics"
+- Rung not found in protocol.md
 
 ---
 
-**Input**: Optional experiment ID and stage.
+**Before collecting evidence:**
 
----
-
-**Stage Inference**
-
-| State | Default Stage |
-|-------|--------------|
-| No evidence | smoke |
-| smoke complete | validation |
-| validation complete | ask |
-
----
-
-**Before Recording Evidence**
-
-Run \`mlspec status --experiment <id> --json\` for pre-flight checks.
-Use \`missing_stages\` and \`evidence_stages.<stage>.exists\` to determine state.
-
-If JSON command fails, fall back to checking file existence at:
-\`mlspec/experiments/<id>/evidence/<stage>.md\`
+Run \`mlspec run <experiment> <rung>\` for pre-flight gate check.
 
 ---
 
 **Steps**
 
-1. **Infer/Confirm** experiment ID and stage
+1. **Infer/Confirm** experiment ID and rung
 2. **Show Inferred Action**
-3. **Check for existing evidence** (if exists → blocked state)
-4. **Run Training or Record Results**
-5. **Update evidence/<stage>.md**
-6. **Show Summary**
+3. **Run preflight gate check** (mlspec run)
+4. **Train baseline_arm** (if required)
+5. **Train treatment_arm**
+6. **Run benchmark** on both arms
+7. **Compute comparison metrics** (if comparison_required)
+8. **Write evidence/<rung>.md**
+9. **Update experiment.yaml status** to running
+10. **Show Summary**
 
 ---
 
 **Blocked State: Evidence Exists**
 
 Options:
-1. **Overwrite** - Delete file and record new results
+1. **Overwrite** - Delete file and collect new results
 2. **Skip** - Use existing evidence, take no action
 3. **Cancel** - Stop, use /mlspec-next
 
@@ -582,21 +317,32 @@ Options:
 
 **Evidence Structure**
 
-runs: [{seed, command, metrics, ...}]
-aggregate: {metric: {mean, std}, ...}
-recommendation: accept/reject/none
+\`\`\`yaml
+entity_type: evidence
+schema: ml-experiment-v3
+experiment_id: <id>
+rung: <rung-id>
+baseline_arm:
+  recipe_ref: <recipe>
+  runs: [{seed, command, metrics, ...}]
+treatment_arm:
+  recipe_ref: <recipe>
+  runs: [{seed, command, metrics, ...}]
+aggregate: {baseline: {...}, treatment: {...}}
+comparison: {metric, delta, success} | null
+\`\`\`
 
 ---
 
 **Boundaries**
 
-**Allowed:** Record evidence, run training
-**Forbidden:** Resolve, create recipes, tag current-best
+**Allowed:** Collect evidence, run training, write evidence files
+**Forbidden:** Resolve, create recipes, tag current-best, skip prepare
 
 ---
 
 **When Ambiguous**
 
-Ask one question about which experiment or stage.`,
+Ask one question about which experiment or rung.`,
   };
 }

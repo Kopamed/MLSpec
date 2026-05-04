@@ -83,14 +83,15 @@ Prefer JSON CLI commands when available:
    - Includes tags, parent_recipe, config, metrics
 
 3. **Evidence Details**
-   - Run: \`mlspec show evidence <experiment> --json\` for all evidence stages
-   - Includes runs, aggregate, summary, recommendation for each stage
+   - Run: \`mlspec show evidence <experiment> --json\` for evidence across all rungs
+   - Includes runs, aggregate, comparison for each rung
 
 4. **Experiments** (mlspec/experiments/*/experiment.yaml)
    - Status: draft, running, resolved
    - base_recipe and proposed_recipe
    - proposed_change description
-   - Existing evidence stages
+   - prepare.md status (if exists)
+   - Existing evidence rungs
 
 5. **Findings** (mlspec/findings/*.md)
    - What works and what doesn't
@@ -137,11 +138,11 @@ If JSON commands fail, fall back to file inspection.
 - **Key characteristics**: RandomForest, MFCC features, 200 trees
 
 ### Active Experiments
-1. add-roi-cropping (running) - smoke complete, validation in progress
+1. add-eos-tokens (running) - pilot complete, validation in progress
 2. tune-n-estimators (draft) - waiting to start
 
 ### Opportunities Identified
-1. **ROI cropping**: Smoke shows +1.2% accuracy - promising
+1. **EOS tokens**: Pilot shows +0.5% perplexity improvement - promising
 2. **Feature selection**: Could reduce overfitting
 3. **Ensemble**: Combine top 2 recipes
 
@@ -162,7 +163,7 @@ Explore mode is read-only and cannot create experiments or run training.
 
 **What you can do:**
 1. /mlspec-propose <id> - create a new experiment
-2. /mlspec-run <experiment> <stage> - run evidence collection
+2. /mlspec-run <experiment> <rung> - run evidence collection for a rung
 3. /mlspec-resolve <experiment> - resolve an experiment
 
 What would you like to do?
@@ -197,8 +198,8 @@ When context is unclear, infer from:
 When genuinely ambiguous, ask one focused question.
 `,
     license: 'MIT',
-    compatibility: 'Requires MLSpec v2 workspace',
-    metadata: { author: 'mlspec', version: '2.0' },
+    compatibility: 'Requires MLSpec v3 workspace with protocol.md',
+    metadata: { author: 'mlspec', version: '3.0' },
   };
 }
 
@@ -243,11 +244,11 @@ Fallback to file inspection if JSON commands fail.
    - Status: draft, running, resolved
    - base_recipe and proposed_recipe
    - proposed_change description
-   - Existing evidence stages
+   - Existing evidence rungs
 
 3. **Evidence** (mlspec/experiments/*/evidence/*.md)
-   - smoke/validation/final evidence files
-   - Runs, metrics, and recommendations
+   - Evidence files per rung (e.g., evidence/pilot.md, evidence/validation.md)
+   - Runs, metrics, and comparisons
    - Compare to base recipe metrics
 
 4. **Findings** (mlspec/findings/*.md)
@@ -266,10 +267,10 @@ Fallback to file inspection if JSON commands fail.
 - **Metrics**: accuracy=0.934, f1=0.921
 
 ### Active Experiments
-1. add-roi-cropping (running) - smoke complete
+1. add-eos-tokens (running) - pilot complete
 
 ### Opportunities Identified
-1. ROI cropping: Smoke shows +1.2% accuracy
+1. EOS tokens: Pilot shows +0.5% perplexity improvement
 
 ### Recommended Next Experiment
 - **Base**: rf-mfcc-v1
@@ -288,7 +289,7 @@ Explore mode is read-only and cannot create experiments or run training.
 
 **What you can do:**
 - Propose a new experiment: /mlspec-propose <description>
-- Run training: /mlspec-run <stage> <experiment>
+- Run evidence collection: /mlspec-run <experiment> <rung>
 - Resolve an experiment: /mlspec-resolve <experiment>
 - Ask /mlspec-next for guidance
 

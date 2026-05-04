@@ -18,6 +18,7 @@ import {
   getOpsxProposeSkillTemplate,
   getMlspecExploreSkillTemplate,
   getMlspecProposeSkillTemplate,
+  getMlspecPrepareSkillTemplate,
   getMlspecRunSkillTemplate,
   getMlspecResolveSkillTemplate,
   getMlspecNextSkillTemplate,
@@ -34,6 +35,7 @@ import {
   getOpsxProposeCommandTemplate,
   getMlspecExploreCommandTemplate,
   getMlspecProposeCommandTemplate,
+  getMlspecPrepareCommandTemplate,
   getMlspecRunCommandTemplate,
   getMlspecResolveCommandTemplate,
   getMlspecNextCommandTemplate,
@@ -77,9 +79,10 @@ export function getSkillTemplates(workflowFilter?: readonly string[]): SkillTemp
     { template: getVerifyChangeSkillTemplate(), dirName: 'openspec-verify-change', workflowId: 'verify' },
     { template: getOnboardSkillTemplate(), dirName: 'openspec-onboard', workflowId: 'onboard' },
     { template: getOpsxProposeSkillTemplate(), dirName: 'openspec-propose', workflowId: 'propose' },
-    // MLSpec V2 workflows (replacing V1)
+    // MLSpec V3 workflows
     { template: getMlspecExploreSkillTemplate(), dirName: 'mlspec-explore', workflowId: 'mlspec-explore' },
     { template: getMlspecProposeSkillTemplate(), dirName: 'mlspec-propose', workflowId: 'mlspec-propose' },
+    { template: getMlspecPrepareSkillTemplate(), dirName: 'mlspec-prepare', workflowId: 'mlspec-prepare' },
     { template: getMlspecRunSkillTemplate(), dirName: 'mlspec-run', workflowId: 'mlspec-run' },
     { template: getMlspecResolveSkillTemplate(), dirName: 'mlspec-resolve', workflowId: 'mlspec-resolve' },
     { template: getMlspecNextSkillTemplate(), dirName: 'mlspec-next', workflowId: 'mlspec-next' },
@@ -110,9 +113,10 @@ export function getCommandTemplates(workflowFilter?: readonly string[]): Command
     { template: getOpsxVerifyCommandTemplate(), id: 'verify' },
     { template: getOpsxOnboardCommandTemplate(), id: 'onboard' },
     { template: getOpsxProposeCommandTemplate(), id: 'propose' },
-    // MLSpec V2 commands
+    // MLSpec V3 commands
     { template: getMlspecExploreCommandTemplate(), id: 'mlspec-explore' },
     { template: getMlspecProposeCommandTemplate(), id: 'mlspec-propose' },
+    { template: getMlspecPrepareCommandTemplate(), id: 'mlspec-prepare' },
     { template: getMlspecRunCommandTemplate(), id: 'mlspec-run' },
     { template: getMlspecResolveCommandTemplate(), id: 'mlspec-resolve' },
     { template: getMlspecNextCommandTemplate(), id: 'mlspec-next' },

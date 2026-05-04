@@ -1,13 +1,13 @@
 /**
- * MLSpec V2 Agent Experiment Protocol
+ * MLSpec V3 Agent Experiment Protocol
  *
  * This file contains the AGENTS.md content that is created by `mlspec init`
- * and documents the agent experiment protocol for MLSpec V2.
+ * and documents the agent experiment protocol for MLSpec V3.
  */
 
-export const AGENTS_CONTENT = `# MLSpec V2 Agent Experiment Protocol
+export const AGENTS_CONTENT = `# MLSpec V3 Agent Experiment Protocol
 
-This document describes the protocol for AI coding agents running ML experiments through MLSpec V2.
+This document describes the protocol for AI coding agents running ML experiments through MLSpec V3.
 
 ## Core Concepts
 
@@ -25,11 +25,11 @@ An experiment proposes a change to a recipe. It has:
 - **proposed_recipe**: The new recipe ID if accepted
 - **proposed_change**: What is being changed
 
-### Evidence Stages
-Evidence is recorded at semantic stages, not arbitrary levels:
-- **smoke**: Cheap signal check — does it run? Is there positive/negative signal?
-- **validation**: Trusted local evaluation — does it beat the base recipe?
-- **final**: External/submission/production result
+### Evidence Ladder
+Evidence is collected at user-defined rungs (not fixed stages):
+- Rungs are defined in protocol.md's evidence_ladder
+- Each rung has a purpose and can_resolve flag
+- Agents collect evidence at each rung using /mlspec-run skill
 
 ## Workflow
 
@@ -49,83 +49,50 @@ Define:
 - Controlled variables (what stays fixed)
 - Success criteria (metric thresholds for acceptance)
 - Abort criteria (when to stop early)
-- Evidence plan (smoke → validation → final)
 
-### 3. Run
-Record evidence at each stage:
+### 3. Prepare
+Prepare the experiment before collecting evidence:
 \`\`\`bash
-/mlspec-run <experiment> <stage>
+/mlspec-prepare <experiment-id>
 \`\`\`
-- Stage is inferred if not specified
-- Records runs, metrics, and recommendations
+- Validates engineering readiness
+- Checks dependencies, data availability, compute resources
+- Creates prepare.md with status (ready/needs_work/protocol_change_required)
 
-### 4. Resolve
-Resolve the experiment based on evidence:
+### 4. Run
+Collect evidence at each rung:
 \`\`\`bash
-/mlspec-resolve <experiment>
+/mlspec-run <experiment-id> <rung-id>
 \`\`\`
+- Validates preflight (protocol.md exists, prepare.md status=ready, rung in ladder)
+- The /mlspec-run skill writes evidence/<rung-id>.md with results
+
+### 5. Resolve
+Resolve the experiment based on evidence at can_resolve rung:
+\`\`\`bash
+/mlspec-resolve <experiment-id>
+\`\`\`
+- Validates preflight (evidence exists for can_resolve rung, no existing resolution.md)
+- The /mlspec-resolve skill writes resolution.md with mechanistic_outcome and practical_outcome
+
 Resolution types:
 - **accept**: Creates new recipe node
 - **reject**: End experiment, no recipe
 - **retry**: Return to running with modifications
 - **hold**: Pause for later
-- **inconclusive**: Evidence neither supports nor refutes
 
-### 5. Next
+### 6. Next
 Get recommended next action:
 \`\`\`bash
-/mlspec-next
+/mlspec-next <experiment-id>
 \`\`\`
 This is read-only and never modifies files.
-
-## Acceptance Warning Matrix
-
-When accepting an experiment, warnings are shown based on evidence stage vs target tag:
-
-| Evidence Stage | → candidate | → current-best |
-|----------------|-------------|----------------|
-| smoke | Warning | Strong warning |
-| validation | OK | Normal |
-| final | OK | Strongest support |
-
-## Controlled Variables
-
-Always document what stays fixed:
-- Model architecture
-- Data split or sampling strategy
-- Preprocessing / input representation
-- Optimizer and learning-rate schedule
-- Batch size / accumulation
-- Seed(s)
-- Training budget / epochs / steps / tokens
-- Evaluation procedure
-
-## Output Conventions
-
-Recommended path structure:
-\`\`\`
-outputs/
-└── <experiment-name>/
-    └── <stage>/
-        ├── command.txt
-        ├── metrics.json
-        ├── train.log
-        ├── predictions.csv
-        ├── checkpoint.pt
-        └── diff.patch
-\`\`\`
-
-## Validation
-
-Run \`mlspec validate\` to check for:
-- **Errors**: Structural problems (missing files, broken YAML)
-- **Warnings**: Protocol issues (missing evidence, thin evidence for current-best)
 
 ## Key Rules
 
 1. Do not run vague experiments — create hypothesis first
 2. Change one thing at a time — document controlled variables
 3. Use real metrics, not placeholder values
-4. Do not accept from smoke as current-best without warning
+4. CLI validates state; skills write artifacts
 5. Skills infer context — CLI stays explicit
 `;

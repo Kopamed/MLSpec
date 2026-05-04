@@ -119,8 +119,8 @@ export class MlspecInitCommand {
       // Create or refresh workspace.yaml
       const workspaceMeta = {
         entity_type: 'evaluation',
-        schema: 'ml-experiment-v2',
-        workspace_version: 2,
+        schema: 'ml-experiment-v3',
+        workspace_version: 3,
       };
       const workspaceFilePath = resolveMlspecPath(projectPath, '.workspace.yaml');
       await FileSystemUtils.writeFile(
@@ -129,7 +129,7 @@ export class MlspecInitCommand {
       );
 
       // Create or refresh evaluation.md
-      const evaluationContent = `# MLSpec V2 Evaluation
+      const evaluationContent = `# MLSpec V3 Evaluation
 
 ## Overview
 

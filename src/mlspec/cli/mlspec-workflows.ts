@@ -1,13 +1,14 @@
 /**
- * MLSpec V2 Workflow Constants
+ * MLSpec V3 Workflow Constants
  *
  * Defines the MLSpec-specific workflow IDs for filtering skill/command generation.
- * V2 replaces the old 6-skill model with 5 new skills.
+ * V3 adds mlspec-prepare skill for engineering readiness verification.
  */
 
 export const MLSPEC_WORKFLOWS = [
   'mlspec-explore',
   'mlspec-propose',
+  'mlspec-prepare',
   'mlspec-run',
   'mlspec-resolve',
   'mlspec-next',

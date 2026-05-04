@@ -1,7 +1,7 @@
 /**
- * MLSpec Next Skill Template
+ * MLSpec Next Skill Template (V3)
  *
- * Read-only router that recommends the next action.
+ * Read-only router that recommends the next action based on V3 workflow.
  */
 import type { SkillTemplate, CommandTemplate } from "../types.js";
 
@@ -16,7 +16,18 @@ This is a read-only skill that inspects the workspace and suggests what to do ne
 
 ---
 
-## Routing
+## V3 Workflow: Prepare → Evidence Ladder → Resolve
+
+**V3 introduces a Prepare stage before evidence collection:**
+
+1. **propose** - Create experiment with protocol.md
+2. **prepare** - Engineering readiness verification (prepare.md)
+3. **run** - Collect evidence for rungs (evidence/<rung>.md)
+4. **resolve** - Assess outcomes and write resolution.md
+
+---
+
+## Routing Logic
 
 **1. Try CLI first**
 Run: \`mlspec next --json\`
@@ -29,185 +40,147 @@ If JSON command fails or output is unparseable: inspect files directly
 
 When using \`mlspec next --json\`, the output contains:
 - \`workspace_state\`: recipes_count, experiments_count, current_best_recipes, current_best_recipe
-- \`existing_stages\`: Object mapping experiment IDs to arrays of existing evidence stage names (e.g., \`{"exp-1": ["smoke", "validation"]}\`)
+- \`existing_rungs\`: Object mapping experiment IDs to arrays of existing evidence rung IDs (e.g., \`{"exp-1": ["pilot", "validation"]}\`)
 - \`actions\`: Array of actions sorted by ascending priority, each with:
   - \`priority\`: Lower number = higher priority
-  - \`action_type\`: one of explore, propose, run, resolve, bootstrap, none
+  - \`action_type\`: one of explore, propose, prepare, run, resolve, bootstrap, none
   - \`suggested_command\`: The command to run
   - \`reason\`: Why this action is recommended
   - \`target\`: Optional { type: 'experiment' | 'recipe', id: string }
 
-**Important:** Do NOT recommend adding evidence for a stage that already exists. Check \`existing_stages\` before suggesting \`mlspec add-evidence <id> --stage <stage>\`.
+**Important:** Do NOT recommend collecting evidence for a rung that already exists. Check \`existing_rungs\` before suggesting \`mlspec run <id> <rung>\`.
 
 ---
 
-**Pause if:** (none - read-only skill, always proceeds)
+## Priority Logic (V3)
+
+**1. Empty Workspace** -> /mlspec-explore (no recipes exist yet)
+
+**2. No experiments** -> /mlspec-propose or /mlspec-explore
+
+**3. Draft experiments without prepare** -> /mlspec-prepare
+- Check: prepare.md exists?
+- If no: route to prepare
+
+**4. Experiments with prepare not ready** -> /mlspec-prepare
+- Check: prepare.md status
+- If status != ready: route to prepare
+
+**5. Need evidence for next rung** -> /mlspec-run
+- Check: protocol.md evidence_ladder
+- Check: existing evidence files
+- Find next incomplete rung
+
+**6. Can resolve** (can_resolve=true rung has evidence) -> /mlspec-resolve
+
+**7. Explore** - If no clear next action
 
 ---
 
-## Bootstrap Routing
-
-**FIRST**: Check workspace state to determine which routing logic applies.
-
-### Routing Logic (in order of priority)
-
-**1. Empty Workspace** (no recipes at all)
--> Recommend /mlspec-explore
-
-**2. Baseline Exists But Has No Metrics**
-
-   **Priority**: Baseline evaluation takes priority even if experiments already exist. Without baseline metrics, comparisons are weak or impossible.
-
-   -> Recommend /mlspec-run in baseline evaluation mode to establish baseline metrics first
-
-**3. Baseline Exists With Metrics**
-
-   -> Recommend /mlspec-explore or /mlspec-propose for first experiment
-
-**4. Multiple Baseline Recipes**
-   - If current-best is unambiguous: use it, continue with routing below
-   - If ambiguous: ask one focused question to select which baseline
-
-**4. Normal Workspace** (experiments exist)
--> Continue with normal priority logic below
-
----
-
-**What to Inspect**
-
-0. **Bootstrap State**
-   - Is mlspec/recipes/ empty?
-   - Does baseline recipe exist?
-   - Does baseline have metrics?
-   - Do experiments exist?
+## What to Inspect
 
 1. **Experiments**
    - Status: draft, running, resolved
-   - Evidence completeness
-   - Abort criteria met?
+   - prepare.md status: ready, needs_work, protocol_change_required
+   - Evidence completeness per rung
 
-2. **Recipes**
+2. **protocol.md**
+   - evidence_ladder: list of rung IDs and their can_resolve flag
+   - baseline_requirements per rung
+
+3. **Evidence files**
+   - evidence/<rung>.md files that exist
+   - Comparison results
+
+4. **Recipes**
    - Tags: current-best, candidate, baseline
    - Lineage and parent chains
    - Metrics populated?
 
-3. **Evidence**
-   - Recommendations from evidence files
-   - Stage progression
+---
 
-4. **Findings**
-   - Any pending findings to review
+## Routing Examples
+
+### No prepare.md
+\`\`\`
+## Next Recommended Action
+
+### /mlspec-prepare <experiment-id>
+
+### Why This Action?
+- Experiment exists but has no prepare.md
+- Prepare stage is required before evidence collection
+
+### Context
+- **Experiment**: my-exp
+- **Status**: draft
+- **Prepare**: missing
+\`\`\`
+
+### Prepare not ready
+\`\`\`
+## Next Recommended Action
+
+### /mlspec-prepare <experiment-id>
+
+### Why This Action?
+- prepare.md exists but status is 'needs_work'
+- Engineering issues must be fixed before evidence collection
+
+### Context
+- **Experiment**: my-exp
+- **Prepare status**: needs_work
+- **Blocking issues**: 2 issues found
+\`\`\`
+
+### Ready for evidence
+\`\`\`
+## Next Recommended Action
+
+### /mlspec-run <experiment-id> validation
+
+### Why This Action?
+- prepare.md status is 'ready'
+- pilot evidence complete, validation next
+- Protocol defines validation rung with can_resolve=false
+
+### Context
+- **Experiment**: my-exp
+- **Prepare status**: ready
+- **Evidence**: pilot complete
+- **Next rung**: validation
+\`\`\`
+
+### Ready to resolve
+\`\`\`
+## Next Recommended Action
+
+### /mlspec-resolve <experiment-id>
+
+### Why This Action?
+- validation evidence complete
+- validation rung has can_resolve=true
+- Experiment ready for resolution
+
+### Context
+- **Experiment**: my-exp
+- **Evidence**: pilot (complete), validation (complete)
+- **Can resolve**: validation
+\`\`\`
 
 ---
 
-**Priority Logic**
+## CLI vs Skill Boundary
 
-**Bootstrap Routing (check first):**
+**This skill (mlspec-next) is read-only.**
 
-1. **Empty workspace** -> /mlspec-explore (no recipes exist yet)
-2. **Baseline exists, no metrics** -> /mlspec-run in baseline evaluation mode (establish baseline metrics first; takes priority even if experiments exist because comparisons are weak without baseline)
-3. **Baseline exists with metrics, no experiments** -> /mlspec-explore or /mlspec-propose
-4. **Multiple baselines, ambiguous** -> ask one question to select
+It only reads workspace state and recommends actions. It never modifies files.
 
-**Normal Routing (baseline has metrics, experiments may exist):**
-
-5. **Failed Abort** - Experiments where abort criteria are met
-6. **Ready to Resolve** - Experiments with complete evidence and recommendations
-7. **Need Validation** - Experiments with smoke evidence waiting for validation (check existing_stages to avoid duplicate)
-8. **Need Smoke** - Experiments with no evidence yet
-9. **Ready for Final** - Experiments with validation complete (check existing_stages to avoid duplicate)
-10. **Explore** - If no clear next action
-
-**Key Distinction:**
-- **Evaluation work** (establishes baseline metrics): Updates \`mlspec/recipes/<id>/recipe.yaml\` top-level \`metrics\` field. This is NOT experiment evidence.
-- **Experiment work** (tests hypotheses): Creates \`mlspec/experiments/<id>/evidence/<stage>.md\` files.
-
-**Duplicate Prevention:** When using JSON output, consult \`existing_stages\` to avoid recommending evidence for stages that already exist at \`mlspec/experiments/<id>/evidence/{smoke,validation,final}.md\`.
-
----
-
-**Output Format**
-
-### Empty Workspace
-\`\`\`
-## Next Recommended Action
-
-### /mlspec-explore
-
-### Why This Action?
-- No baseline recipe exists yet
-- The MLSpec workspace is empty
-
-### Context
-- Recipes: none
-- Experiments: none
-- Workspace requires bootstrap before experiments can be proposed
-
-### Alternative Actions
-1. /mlspec-propose <baseline-id> - if baseline ID is obvious
-\`\`\`
-
-### Baseline Exists, No Metrics
-\`\`\`
-## Next Recommended Action
-
-### /mlspec-run
-
-### Why This Action?
-- Baseline recipe exists but has no metrics
-- Baseline evaluation takes priority even if experiments exist: without baseline metrics, comparisons are weak or impossible
-- Evaluation work (establishes baseline) is distinct from experiment work (tests hypotheses)
-
-### Context
-- **Baseline**: <baseline-id> (no metrics yet)
-- **Status**: Baseline metrics need to be established via evaluation
-
-### Alternative Actions
-1. /mlspec-explore - to understand the project structure first
-\`\`\`
-
-### Baseline Exists With Metrics, No Experiments
-\`\`\`
-## Next Recommended Action
-
-### /mlspec-propose <experiment-id> --from <baseline-id>
-
-### Why This Action?
-- Baseline is established with metrics
-- Workspace is ready for the first experiment
-
-### Context
-- **Current Best**: <baseline-id> (metrics established)
-- **Experiments**: none
-- **Status**: Ready for first experiment proposal
-
-### Alternative Actions
-1. /mlspec-explore - to identify promising experiment directions
-\`\`\`
-
-### Normal Workspace (experiments exist)
-\`\`\`
-## Next Recommended Action
-
-### /mlspec-run validation add-roi-cropping
-
-### Why This Action?
-- Smoke evidence is positive (+1.1% accuracy)
-- No validation evidence yet
-- Experiment is ready for trusted evaluation
-
-### Context
-- **Current Best**: rf-mfcc-v1 (accuracy=0.934)
-- **Active Experiments**: 3 total
-  - add-roi-cropping: smoke complete, needs validation
-  - tune-n-estimators: draft, no evidence
-  - try-ensemble: running, validation in progress
-
-### Alternative Actions
-1. /mlspec-resolve try-ensemble - if validation is complete
-2. /mlspec-explore - to identify new opportunities
-3. /mlspec-propose X - to start a new experiment
-\`\`\`
+**The actual work is done by other skills:**
+- /mlspec-propose: Creates experiment with protocol.md
+- /mlspec-prepare: Engineering readiness checks
+- /mlspec-run: Collects evidence
+- /mlspec-resolve: Assesses outcomes
 
 ---
 
@@ -224,8 +197,8 @@ When using \`mlspec next --json\`, the output contains:
 It only reads and recommends.
 `,
     license: "MIT",
-    compatibility: "Requires MLSpec v2 workspace",
-    metadata: { author: "mlspec", version: "2.0" },
+    compatibility: "Requires MLSpec v3 workspace with protocol.md",
+    metadata: { author: "mlspec", version: "3.0" },
   };
 }
 
@@ -235,28 +208,31 @@ export function getMlspecNextCommandTemplate(): CommandTemplate {
     description:
       "Read-only router that recommends the next action based on workspace state.",
     category: "Workflow",
-    tags: ["workflow", "mlspec", "ml", "next", "router"],
+    tags: ["workflow", "mlspec", "ml", "next", "router", "v3"],
     content: `Recommend the next action based on workspace state.
 
 This is a read-only skill. It never modifies any files.
 
 ---
 
-**Routing**
+**V3 Priority Order**
 
-1. **Try CLI first**: Run \`mlspec next --json\`
-2. **Fallback**: File inspection if JSON unavailable or unparseable
+1. Empty workspace -> /mlspec-explore
+2. No experiments -> /mlspec-propose
+3. Draft without prepare -> /mlspec-prepare
+4. Prepare not ready -> /mlspec-prepare
+5. Need evidence -> /mlspec-run <experiment> <rung>
+6. Can resolve -> /mlspec-resolve
+7. No clear action -> /mlspec-explore
 
 ---
 
-**Priority Order**
+**Routing Checks**
 
-1. Failed abort criteria -> recommend resolve with reject
-2. Complete evidence + recommendation -> recommend resolve
-3. Smoke complete, no validation -> recommend validation run
-4. Draft, no evidence -> recommend smoke run
-5. Validation complete, no final -> recommend final run
-6. No clear action -> recommend explore
+- prepare.md exists? status == ready?
+- protocol.md evidence_ladder defined?
+- existing evidence files (evidence/<rung>.md)
+- can_resolve rung has evidence?
 
 ---
 
@@ -265,11 +241,11 @@ This is a read-only skill. It never modifies any files.
 \`\`\`
 ## Next Recommended Action
 
-### /mlspec-run validation <experiment>
+### /mlspec-run <experiment> <rung>
 
 ### Why?
-- Smoke evidence positive
-- Needs validation
+- prepare.md status: ready
+- pilot complete, validation next
 
 ### Context
 - Current best: <recipe>

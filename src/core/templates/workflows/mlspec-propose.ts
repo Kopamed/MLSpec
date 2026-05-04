@@ -1,361 +1,315 @@
 /**
- * MLSpec Propose Skill Template
+ * MLSpec Propose Skill Template (V3)
  *
- * Skill for creating experiments from ideas.
+ * Skill for creating experiments with protocol.md defining the evidence ladder.
  */
 import type { SkillTemplate, CommandTemplate } from '../types.js';
 
 export function getMlspecProposeSkillTemplate(): SkillTemplate {
   return {
     name: 'mlspec-propose',
-    description: 'Create a new MLSpec experiment from an idea. Define base_recipe, proposed_recipe, proposed_change, controlled_variables, success_criteria, abort_criteria, and evidence_plan.',
+    description: 'Create a new MLSpec experiment from an idea with protocol.md defining the evidence ladder.',
     instructions: `Create a new MLSpec experiment from an idea.
 
-This skill creates an experiment entry and populates hypothesis.md with a well-structured experimental plan. It infers missing context from workspace and conversation.
+This skill creates an experiment with protocol.md defining the evidence ladder. It infers missing context from workspace and conversation.
+
+---
+
+## V3 Experiment Structure
+
+V3 experiments have three key files:
+- **experiment.yaml**: Status, base_recipe, proposed_recipe
+- **hypothesis.md**: Mechanistic and practical hypotheses
+- **protocol.md**: Evidence ladder, compute agreement, baseline requirements
+
+The protocol.md defines the evidence ladder - a sequence of rungs with budgets, arms, and comparison criteria.
 
 ---
 
 **Pause if:**
 - Context is genuinely ambiguous after inference → ask one clarifying question
-- User wants to skip hypothesis definition → "A hypothesis is required for valid experiments."
+- User wants to skip protocol definition → "A protocol is required for V3 experiments."
 - User wants to run training during proposal → "Training happens during /mlspec-run, not /mlspec-propose."
 
 ---
 
-## Bootstrap Mode: Create First Baseline Recipe
+## Steps
 
-**FIRST**: Run \`mlspec status --json\` to detect workspace state.
+### 1. Infer Context
 
-If the JSON output shows:
-- \`recipes.length === 0\`: Enter bootstrap mode (no recipes exist yet)
-- \`current_best_recipes\`: Array of recipes with 'current-best' tag (use to detect single vs multiple baselines)
-- \`experiments.by_status\`: Object with draft/running/resolved arrays (use to avoid duplicate experiment IDs)
+- Check for prior /mlspec-explore output suggesting an experiment
+- Look for current-best recipe to use as base
+- Check active experiments to avoid duplicate ideas
 
-If \`mlspec status --json\` fails, fall back to file inspection:
-- Check if \`mlspec/recipes/\` is empty (no recipe subdirectories exist)
+### 2. Confirm or Ask for:
+- experiment ID (kebab-case, e.g., add-eos-tokens)
+- base_recipe (the recipe you're modifying)
+- proposed_recipe (the new recipe ID you'll create if accepted)
+- proposed_change (what you're changing)
 
-If no recipes exist, enter **bootstrap mode** and create a root baseline recipe (NOT an experiment):
+### 3. Design the Evidence Ladder
 
-### Bootstrap Steps
+**This is the key V3 decision - design the evidence ladder:**
 
-1. **Infer Baseline Recipe ID**
-   - Infer from project name, config/model name, or ask user
-   - Fallback: use \`baseline-v1\`
-   - If obvious from context, proceed without asking
+Ask the user to define:
 
-2. **Show Inferred Action**
+1. **Rungs** - What evidence stages do you need?
+   - Example: pilot (cheap, quick check) → validation (full evaluation)
+   - Each rung has: id, purpose, budget, arms, benchmark, comparison, can_resolve
 
-   \`\`\`
-   I'm going to create the first baseline recipe:
-   - Recipe ID: <baseline-id>
-   - Tags: baseline, current-best
-   - parent_recipe: null
-   - created_by_experiment: null
+2. **Per-Rung Budget**
+   - model_params: How large is the model?
+   - training_tokens: How many tokens to train on?
+   - eval_tokens: How many tokens for evaluation?
 
-   Proceeding...
-   \`\`\`
+3. **Arms** - What are you comparing?
+   - baseline_arm: Recipe reference or null for new
+   - treatment_arm: Base recipe with config_overrides for intervention
 
-3. **Create Root Recipe**
+4. **Benchmark** - What dataset and metrics?
+   - dataset: Name of benchmark dataset
+   - metrics: Array of metric names to evaluate
 
-   \`\`\`bash
-   mlspec new recipe <baseline-id> --tag baseline
-   mlspec tag recipe <baseline-id> current-best
-   \`\`\`
+5. **Comparison** - How do you define success?
+   - comparison_required: true/false
+   - comparison_metric: Which metric to compare?
+   - comparison_direction: higher_is_better or lower_is_better
+   - success_threshold: What delta qualifies as success?
 
-4. **Greenfield Bootstrap** (no existing scripts/configs):
-   - Create skeletal recipe with TODO config fields
-   - Mark metrics as pending
-   - Output recommendation for implementation work or /mlspec-run
+6. **can_resolve** - Which rung can resolve the experiment?
+   - Typically the final/last rung
+   - pilot rung should have can_resolve=false
 
-5. **Brownfield Bootstrap** (existing scripts/configs found):
-   - Attempt best-effort metric discovery from:
-     - Local scripts, configs, outputs, logs, notebooks
-     - README or documentation
-     - Local W&B/MLflow artifacts or references if present
-   - No external service access required
-   - Populate metrics in recipe.yaml if clearly discoverable
-   - Leave metrics empty/pending if not clearly discoverable
+7. **Baseline Requirements per Rung**
+   - required: Is a baseline required for this rung?
+   - recipe_ref: Existing recipe or null
+   - train_from_scratch: Should we train from scratch?
 
-6. **Bootstrap Output Format**
+### 4. Create the Experiment
 
-   \`\`\`
-   ## Baseline Recipe Created: <baseline-id>
+Create experiment directory with:
+- experiment.yaml
+- hypothesis.md
+- protocol.md
 
-   ### Summary
-   - **Type**: Root baseline recipe
-   - **Tags**: baseline, current-best
-   - **parent_recipe**: null
-   - **created_by_experiment**: null
+### 5. Fill hypothesis.md
 
-   ### Configuration
-   <TODO: fill in your baseline configuration>
+Help the user define:
+- **Mechanistic Hypothesis**: What mechanism are you testing?
+- **Practical Hypothesis**: What practical utility do you expect?
 
-   ### Metrics
-   <pending - run evaluation to establish baseline metrics>
+### 6. Create protocol.md
 
-   ### Next Steps
-   1. Implement baseline approach if not yet implemented
-   2. Run /mlspec-run in baseline evaluation mode to establish baseline metrics
+\`\`\`yaml
+---
+entity_type: protocol
+schema: ml-experiment-v3
+experiment_id: add-eos-tokens
+compute_agreement:
+  cpu_cores: 8
+  gpu_devices: 1
+  gpu_memory_gb: 40
+  wall_time_max_hours: 24
+  token_budget: 1000000000
+evidence_ladder:
+  - id: pilot
+    purpose: Quick check if intervention works at all
+    budget:
+      model_params: 124000000
+      training_tokens: 1000000
+      eval_tokens: 500000
+    arms:
+      baseline_arm:
+        id: baseline
+        recipe_ref: baseline-v1
+        config_overrides: {}
+        train_from_scratch: false
+      treatment_arm:
+        id: treatment
+        recipe_ref: baseline-v1
+        config_overrides:
+          intervention: eos_tokens
+    benchmark:
+      dataset: wikipedia
+      metrics: [perplexity, accuracy]
+    comparison:
+      comparison_required: false
+    can_resolve: false
+  - id: validation
+    purpose: Full evaluation with statistical significance
+    budget:
+      model_params: 124000000
+      training_tokens: 1000000000
+      eval_tokens: 10000000
+    arms:
+      baseline_arm:
+        id: baseline
+        recipe_ref: baseline-v1
+        config_overrides: {}
+        train_from_scratch: false
+      treatment_arm:
+        id: treatment
+        recipe_ref: baseline-v1
+        config_overrides:
+          intervention: eos_tokens
+    benchmark:
+      dataset: wikipedia
+      metrics: [perplexity, accuracy]
+    comparison:
+      comparison_required: true
+      comparison_metric: perplexity
+      comparison_direction: lower_is_better
+      success_threshold: -0.05
+    can_resolve: true
+baseline_requirements:
+  pilot:
+    required: true
+    recipe_ref: baseline-v1
+    train_from_scratch: false
+  validation:
+    required: true
+    recipe_ref: baseline-v1
+    train_from_scratch: false
+---
+\`\`\`
 
-   **Important**: Baseline establishment is evaluation work that updates \`mlspec/recipes/<id>/recipe.yaml\` metrics. It is NOT experiment evidence work.
+### 7. Validate
 
-   Next: /mlspec-run
-   \`\`\`
+\`\`\`bash
+mlspec validate
+\`\`\`
 
 ---
 
-## Normal Mode: Create Experiment
+## Protocol Design Questions
 
-(When at least one recipe already exists, proceed with normal experiment creation below)
+When designing the evidence ladder, ask:
 
-**Input**: Experiment ID and optionally base_recipe, proposed_recipe, or change description.
+1. **How many rungs?**
+   - At minimum: pilot (can it work?) + validation (does it work at scale?)
+   - Some experiments need intermediate rungs
 
----
+2. **What token budget per rung?**
+   - pilot: ~1M tokens (quick check)
+   - validation: ~1B tokens (full evaluation)
 
-**Steps**
+3. **Which rung can resolve?**
+   - Usually the final/last rung
+   - pilot should NOT have can_resolve=true
 
-1. **Infer Context**
-   - Check for prior /mlspec-explore output suggesting an experiment
-   - Look for current-best recipe to use as base
-   - Check active experiments to avoid duplicate ideas
-
-2. **Confirm or Ask for:**
-   - experiment ID (kebab-case, e.g., add-roi-cropping)
-   - base_recipe (the recipe you're modifying)
-   - proposed_recipe (the new recipe ID you'll create if accepted)
-   - proposed_change (what you're changing)
-
-3. **Create the Experiment**
-
-   \`\`\`bash
-   mlspec new experiment <id> --from <base_recipe> --proposes <proposed_recipe>
-   \`\`\`
-
-   This creates mlspec/experiments/<id>/ with:
-   - experiment.yaml (metadata)
-   - hypothesis.md (template)
-
-4. **Fill hypothesis.md**
-
-   Help the user define:
-   - **Controlled Variables**: What stays the same (model type, data split, seeds, evaluation)
-   - **Success Criteria**: Metric improvements that justify acceptance
-   - **Abort Criteria**: Results that indicate early stopping
-   - **Evidence Plan**: smoke -> validation -> final progression
-
-5. **Validate**
-
-   \`\`\`bash
-   mlspec validate
-   \`\`\`
+4. **Is comparison required for pilot?**
+   - Usually NO - pilot is just a quick check
+   - Usually YES - validation needs formal comparison
 
 ---
 
-**Inference Rules**
-
-| If user says... | Infer... |
-|-----------------|----------|
-| "propose add-roi-cropping" | base_recipe = current-best tagged recipe |
-| "propose from rf-mfcc-v1" | base_recipe = rf-mfcc-v1 |
-| "test LSTM against RNN" | base_recipe = RNN recipe, proposed = LSTM recipe |
-
-If multiple inferences possible, ask one question.
-
----
-
-**Output Format**
+## Output Format
 
 \`\`\`
-## Experiment Created: add-roi-cropping
+## Experiment Created: add-eos-tokens
 
 ### Summary
-- **Base**: rf-mfcc-v1
-- **Proposed**: rf-mfcc-roi-v1
-- **Change**: Add ROI cropping before classification
+- **Base**: baseline-v1
+- **Proposed**: eos-token-v1
+- **Change**: Add EOS tokens to improve perplexity
 
-### Hypothesis
-ROI cropping will improve accuracy by >1% while keeping everything else fixed.
-
-### Controlled Variables
-- Feature extraction: MFCC parameters unchanged
-- Classifier: Random Forest same hyperparameters
-- Training data: Same dataset split
-
-### Success Criteria
-- Validation accuracy improvement > 1%
-- No degradation on F1 score
-
-### Abort Criteria
-- Smoke run fails to complete
-- Validation shows accuracy decrease
-
-### Evidence Plan
-1. smoke: Quick run on subset (does it work?)
-2. validation: Full CV against base
-3. final: Production evaluation
+### Evidence Ladder
+| Rung | Purpose | Can Resolve |
+|------|---------|-------------|
+| pilot | Quick check | No |
+| validation | Full evaluation | Yes |
 
 ### Next Steps
-1. Run smoke evidence: /mlspec-run smoke add-roi-cropping
-2. Explore alternatives: /mlspec-explore
+1. Run prepare stage: /mlspec-prepare add-eos-tokens
+2. Collect pilot evidence: /mlspec-run add-eos-tokens pilot
+3. Collect validation evidence: /mlspec-run add-eos-tokens validation
+4. Resolve experiment: /mlspec-resolve add-eos-tokens
 \`\`\`
 
-### Blocked: Context Ambiguous
+---
 
-\`\`\`
-## Proposal Blocked: Context Ambiguous
+## CLI vs Skill Boundary
 
-I need clarification to create a valid experiment:
+**CLI (mlspec validate) does:**
+- Validates experiment.yaml, hypothesis.md, protocol.md exist
+- Validates protocol.md schema
+- Validates evidence_ladder is non-empty
 
-<specific question>
+**Skill does:**
+- Creates experiment files
+- Designs evidence ladder with user
+- Writes protocol.md
 
-**Options:**
-1. Answer the question above
-2. Provide more context about what you want to change
-3. Ask /mlspec-explore to identify opportunities
-\`\`\`
+**CLI never:**
+- Invokes skills
+- Designs experiments
+- Makes ML decisions
 
 ---
 
 **Boundaries**
 
-**Bootstrap Mode (no recipes):**
-- Creates: mlspec/recipes/<id>/recipe.yaml (root recipe with parent_recipe: null, created_by_experiment: null)
-- Tags: baseline, current-best
-- Forbidden: Run training, accept/reject, create experiments
-
-**Normal Mode (recipes exist):**
 **Creates:**
 - mlspec/experiments/<id>/experiment.yaml
 - mlspec/experiments/<id>/hypothesis.md
+- mlspec/experiments/<id>/protocol.md
 
 **Must Define:**
 - base_recipe, proposed_recipe, proposed_change
-- controlled_variables, success_criteria, abort_criteria
-- evidence_plan
+- evidence_ladder with rungs, budgets, arms, benchmarks, comparison
+- baseline_requirements per rung
 
 **Forbidden:**
 - Run training
 - Accept/reject/retry/hold/inconclusive
-- Create recipe nodes (except in bootstrap mode)
-
----
-
-**Show Inferred Action Before Executing**
-
-Bootstrap mode (no recipes):
-\`\`\`
-I'm going to create the first baseline recipe:
-- Recipe ID: <baseline-id>
-- Tags: baseline, current-best
-- parent_recipe: null
-- created_by_experiment: null
-
-Proceeding...
-\`\`\`
-
-Normal mode (recipes exist):
-\`\`\`
-I'm going to create experiment "add-roi-cropping":
-- base_recipe: rf-mfcc-v1 (current-best)
-- proposed_recipe: rf-mfcc-roi-v1
-- proposed_change: Add ROI cropping before classification
-
-Proceeding...
-\`\`\`
-
-**When Genuinely Ambiguous** (bootstrap mode):
-
-If baseline ID or approach is genuinely ambiguous, ask one focused question:
-\`\`\`
-I found multiple possible baseline approaches in your project:
-1. CNN classifier in src/model.py
-2. Traditional ML in train.py
-3. Existing config in params.json
-
-Which should I use as the baseline?
-\`\`\`
-
-If obvious from context (project name, single script, etc.), proceed without asking.
+- Collect evidence
 `,
     license: 'MIT',
-    compatibility: 'Requires MLSpec v2 workspace',
-    metadata: { author: 'mlspec', version: '2.0' },
+    compatibility: 'Requires MLSpec v3 workspace',
+    metadata: { author: 'mlspec', version: '3.0' },
   };
 }
 
 export function getMlspecProposeCommandTemplate(): CommandTemplate {
   return {
     name: 'MLSpec: Propose Experiment',
-    description: 'Create a new MLSpec experiment from an idea with full hypothesis definition.',
+    description: 'Create a new MLSpec experiment with protocol.md defining the evidence ladder.',
     category: 'Workflow',
-    tags: ['workflow', 'mlspec', 'ml', 'experiment', 'propose'],
+    tags: ['workflow', 'mlspec', 'ml', 'experiment', 'propose', 'v3'],
     content: `Create a new MLSpec experiment from an idea.
 
-This skill creates an experiment entry with hypothesis. It infers missing context from workspace.
+This skill creates an experiment with protocol.md defining the evidence ladder.
 
 ---
 
-**Pause if:**
-- Context ambiguous after inference → ask one question
-- User wants to skip hypothesis → "A hypothesis is required."
+**Key V3 Decision:** Design the evidence ladder
+
+Ask the user to define:
+1. Rungs (e.g., pilot → validation)
+2. Budget per rung (model_params, training_tokens)
+3. Arms (baseline vs treatment)
+4. Benchmark (dataset, metrics)
+5. Comparison (required, metric, threshold)
+6. can_resolve (which rung can end the experiment)
 
 ---
 
-**Input**: experiment ID and optionally base_recipe, proposed_recipe, or change.
+**Creates:**
+- experiment.yaml
+- hypothesis.md
+- protocol.md
 
 ---
 
-**Workspace Detection**
-
-Before creating experiments, run \`mlspec status --json\` to detect:
-- Empty workspace → bootstrap mode
-- current_best_recipes → single or multiple baselines (ambiguous if length > 1)
-- experiments.by_status → existing experiments to avoid duplicate IDs
-
-If JSON command fails, fall back to file inspection.
-
----
-
-**Steps**
-
-1. **Infer Context** - Check for prior exploration output or current-best recipe
-2. **Confirm Details** - base_recipe, proposed_recipe, proposed_change
-3. **Create Experiment** - mlspec new experiment <id> --from <base> --proposes <proposed>
-4. **Fill hypothesis.md** - controlled_variables, success_criteria, abort_criteria, evidence_plan
-5. **Validate** - mlspec validate
-
----
-
-**Inference Rules**
-
-| If user says... | Infer... |
-|-----------------|----------|
-| "propose X" | base_recipe = current-best |
-| "propose from Y" | base_recipe = Y |
-
-If ambiguous, ask one question.
-
----
-
-**Output Format**
-
-\`\`\`
-## Experiment Created: <id>
-
-### Summary
-- **Base**: <base_recipe>
-- **Proposed**: <proposed_recipe>
-- **Change**: <proposed_change>
-
-### Next Steps
-/mlspec-run smoke <id>
-\`\`\`
+**Next Steps:**
+1. /mlspec-prepare - engineering readiness
+2. /mlspec-run <rung> - collect evidence
+3. /mlspec-resolve - assess outcomes
 
 ---
 
 **Boundaries**
 
-**Creates:** experiment.yaml, hypothesis.md
 **Forbidden:** Run training, resolve experiments`,
   };
 }
