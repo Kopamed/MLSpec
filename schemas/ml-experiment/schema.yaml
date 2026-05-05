@@ -1,0 +1,142 @@
+name: ml-experiment
+version: 1
+description: ML experimentation workflow - hypothesis to evidence to decision
+
+artifacts:
+  - id: experiment
+    generates: experiment.md
+    description: Frame the ML question, hypothesis, mechanism, and decision target
+    template: experiment.md
+    instruction: |
+      Define the ML experiment that establishes what question you are trying to answer.
+
+      Sections:
+      - **Experiment Type**: One of Baseline Establishment | Intervention Comparison | Ablation | Scaling Run | Bug-Fix | Reproduction Run. This classification determines evidence requirements.
+        - Baseline Establishment: No prior baseline needed. Specify target/reference/acceptance thresholds.
+        - Intervention Comparison: Requires real baseline/comparator.
+        - Ablation: Requires full baseline run first.
+        - Scaling Run: Specifies scale dimensions and expected scaling behavior.
+        - Bug-Fix: Reproduces specific failure, then verifies fix.
+        - Reproduction Run: Reproduces published result, then compares.
+      - **Hypothesis**: What you believe might be true and why. Be specific about the expected mechanism.
+      - **Expected Mechanism**: The causal chain or process through which the intervention produces effects.
+      - **Intervention**: The specific change, treatment, or modification being tested.
+      - **Baseline/Comparator**: What you compare against (e.g., no intervention, current approach, published result).
+      - **Controlled Variables**: What stays constant to ensure fair comparison.
+      - **Decision Target**: The metric or outcome that determines success. How will you know if it worked?
+
+      Keep it concise. Focus on the "why" and "what" - implementation details belong in protocol.
+
+  - id: protocol
+    generates: protocol.md
+    description: Define baseline/treatment, controls, metrics, budget, and success criteria
+    template: protocol.md
+    requires:
+      - experiment
+    instruction: |
+      Define the experimental methodology that specifies how you will test the hypothesis.
+
+      Sections:
+      - **Baseline/Treatment Definition**: Precise specification of control and intervention conditions.
+      - **Controlled Variables**: List of variables held constant with their target values.
+      - **Metrics**: Quantifiable measures to evaluate outcomes (with target values or ranges).
+      - **Compute Budget**: GPU hours, memory, infrastructure constraints.
+      - **Time Budget**: Wall-clock time limits, iteration counts, epoch limits.
+      - **Qualitative Checks**: Human evaluation criteria, manual inspection points.
+      - **Success Criteria**: Specific thresholds that constitute a positive result.
+      - **Invalidation Conditions**: What would make the experiment invalid or inconclusive (e.g., data leakage, implementation bugs, metric anomalies).
+
+      This is the contract - deviation from protocol must be documented in evidence.
+
+  - id: prepare
+    generates: prepare.md
+    description: Implementation, configs, eval harness, smoke checks, budget readiness
+    template: prepare.md
+    requires:
+      - protocol
+    instruction: |
+      Prepare the implementation and evaluation infrastructure.
+
+      Use checkbox format for trackable tasks. Groups related tasks under ## headings with phases.
+
+      Required phases:
+      - **Phase: Infrastructure**: Model implementation, data pipeline, tokenizer setup
+      - **Phase: Tiny/Smoke Run**: Quick sanity checks on minimal data/epochs
+      - **Phase: Protocol Run**: Full protocol execution tasks
+      - **Run Readiness**: Pre-flight checks before running (tokenizer exists, data exists, batch size matches, paths writable)
+      - **Logging**: Metrics and artifacts to capture
+
+      Each task should include: file(s) affected, verification command, expected output or completion condition.
+
+  - id: evidence
+    generates: evidence.md
+    description: "Record what actually ran: commands, configs, commits, metrics, deviations"
+    template: evidence.md
+    requires:
+      - prepare
+    instruction: |
+      Document the experimental run and its results.
+
+      **CRITICAL EVIDENCE GATES:**
+      - Evidence must only include ACTUAL commands run, actual metrics, actual artifacts
+      - Planned future runs MUST NOT be counted as evidence
+      - Evidence grade MUST be filled in honestly:
+        - Smoke: < 1 epoch, sanity checks only. Cannot support Accepted/Rejected.
+        - Partial-Run: Protocol partially executed. Cannot support Accepted/Rejected.
+        - Full-Protocol: All protocol steps completed. Required for Accepted/Rejected.
+        - Failed-Run: Run failed or interrupted. Decision must be Invalid or Needs-Rerun.
+      - If run deviated from protocol, downgrade evidence grade and record deviation
+
+      Sections:
+      - **Run Identity**: Run ID, timestamp, machine, git commit, environment
+      - **Run Records**: Table of steps (Smoke, Full) with command, duration, status, notes
+      - **Commands Run**: Exact commands with seeds, versions, environment variables
+      - **Configs Used**: Final config values (must match protocol or deviation recorded)
+      - **Commits**: Git SHAs for code reproducibility
+      - **Metrics Observed**: Table with metric, value, expected, delta, notes
+      - **Evidence Grade**: Smoke | Partial-Run | Full-Protocol | Failed-Run
+      - **Protocol Satisfaction**: Satisfies Protocol | Deviates From Protocol | Does Not Satisfy Protocol
+      - **Deviations from Protocol**: Table of what changed, why, impact on validity
+      - **Claims Invalidated During Run**: Any hypothesis claims invalidated by the run
+      - **Implementation Issues Found**: Bugs, data issues, infrastructure problems
+      - **Validity Assessment**: Valid | Conditionally Valid | Invalid
+      - **Artifacts Produced**: Checkpoints, logs, visualizations with paths and hashes
+      - **Samples**: Representative outputs (good and bad)
+
+  - id: resolution
+    generates: resolution.md
+    description: "Turn evidence into a decision: accepted/rejected/inconclusive/invalid"
+    template: resolution.md
+    requires:
+      - evidence
+    instruction: |
+      Conclude the experiment with a decision and next steps.
+
+      **CRITICAL RESOLUTION GATES:**
+      - Decision-Grade Evidence = No: Decision MUST be Inconclusive, Invalid, or Needs-Rerun
+      - Evidence Grade = Smoke or Partial-Run: Decision MUST be Inconclusive, Invalid, or Needs-Rerun
+      - Evidence Grade = Failed-Run: Decision MUST be Invalid or Needs-Rerun
+      - Decision = Accepted or Rejected: Requires Decision-Grade Evidence = Yes AND Evidence Grade = Full-Protocol AND Protocol Satisfaction = Satisfies Protocol
+
+      Sections:
+      - **Decision-Grade Evidence**: Yes | No
+        - Yes: Evidence is sufficient for Accepted/Rejected
+        - No: Use Inconclusive/Invalid/Needs-Rerun
+      - **Decision**: Accepted | Rejected | Inconclusive | Invalid | Needs-Rerun
+        - Accepted: Requires Full-Protocol + Protocol Satisfaction + Decision-Grade Evidence = Yes
+        - Rejected: Requires Full-Protocol + Protocol Satisfaction + Decision-Grade Evidence = Yes
+        - Inconclusive: Evidence insufficient or protocol not satisfied
+        - Invalid: Experiment flawed or protocol not satisfied
+        - Needs-Rerun: Technical issues prevented valid results
+      - **Basis**: Which evidence supports the decision
+      - **Protocol Compliance**: Compliant | Non-Compliant (with justification)
+      - **Evidence Summary**: Brief synthesis of key findings
+      - **Cost**: Compute/time consumed vs. budgeted
+      - **Next Action**: Archive | Rerun | Update Protocol | Open Follow-Up Change | Stop
+
+      Decision should be defensible based on the evidence and aligned with the success criteria defined in protocol.
+
+apply:
+  requires:
+    - prepare
+  tracks: prepare.md
