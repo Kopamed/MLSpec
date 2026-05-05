@@ -11,6 +11,13 @@ artifacts:
       Define the ML experiment that establishes what question you are trying to answer.
 
       Sections:
+      - **Experiment Type**: One of Baseline Establishment | Intervention Comparison | Ablation | Scaling Run | Bug-Fix | Reproduction Run. This classification determines evidence requirements.
+        - Baseline Establishment: No prior baseline needed. Specify target/reference/acceptance thresholds.
+        - Intervention Comparison: Requires real baseline/comparator.
+        - Ablation: Requires full baseline run first.
+        - Scaling Run: Specifies scale dimensions and expected scaling behavior.
+        - Bug-Fix: Reproduces specific failure, then verifies fix.
+        - Reproduction Run: Reproduces published result, then compares.
       - **Hypothesis**: What you believe might be true and why. Be specific about the expected mechanism.
       - **Expected Mechanism**: The causal chain or process through which the intervention produces effects.
       - **Intervention**: The specific change, treatment, or modification being tested.
@@ -50,32 +57,16 @@ artifacts:
     instruction: |
       Prepare the implementation and evaluation infrastructure.
 
-      Use checkbox format for trackable tasks. Groups related tasks under ## headings.
+      Use checkbox format for trackable tasks. Groups related tasks under ## headings with phases.
 
-      Sections:
-      - **Config**: Model, data, training/inference configuration.
-      - **Eval Harness**: Code and scripts to run evaluation.
-      - **Smoke Tests**: Quick sanity checks before full run.
-      - **Logging**: What metrics and artifacts will be captured.
-      - **Budget Readiness**: Confirm compute/time budget is sufficient and tracked.
+      Required phases:
+      - **Phase: Infrastructure**: Model implementation, data pipeline, tokenizer setup
+      - **Phase: Tiny/Smoke Run**: Quick sanity checks on minimal data/epochs
+      - **Phase: Protocol Run**: Full protocol execution tasks
+      - **Run Readiness**: Pre-flight checks before running (tokenizer exists, data exists, batch size matches, paths writable)
+      - **Logging**: Metrics and artifacts to capture
 
-      Example structure:
-      ```
-      ## Config
-
-      - [ ] 1.1 Model config: architecture, hyperparameters
-      - [ ] 1.2 Data config: dataset, preprocessing, splits
-
-      ## Eval Harness
-
-      - [ ] 2.1 Evaluation script that computes metrics
-      - [ ] 2.2 Integration with experiment tracking
-
-      ## Smoke Tests
-
-      - [ ] 3.1 Run on 10 samples to verify no crashes
-      - [ ] 3.2 Verify metric computation matches expected values
-      ```
+      Each task should include: file(s) affected, verification command, expected output or completion condition.
 
   - id: evidence
     generates: evidence.md
@@ -86,17 +77,31 @@ artifacts:
     instruction: |
       Document the experimental run and its results.
 
-      Sections:
-      - **Commands Run**: Exact commands executed (with versions, seeds).
-      - **Configs Used**: Final configuration values (may differ from prepare).
-      - **Commits**: Git commit SHAs for code reproducibility.
-      - **Metrics Observed**: Actual metric values with confidence intervals if applicable.
-      - **Samples**: Representative examples of model outputs (good and bad).
-      - **Artifacts**: Links to saved models, logs, visualizations.
-      - **Deviations from Protocol**: Any changes from the planned protocol and why.
-      - **Validity Checks**: Did the experiment run as intended? Any anomalies?
+      **CRITICAL EVIDENCE GATES:**
+      - Evidence must only include ACTUAL commands run, actual metrics, actual artifacts
+      - Planned future runs MUST NOT be counted as evidence
+      - Evidence grade MUST be filled in honestly:
+        - Smoke: < 1 epoch, sanity checks only. Cannot support Accepted/Rejected.
+        - Partial-Run: Protocol partially executed. Cannot support Accepted/Rejected.
+        - Full-Protocol: All protocol steps completed. Required for Accepted/Rejected.
+        - Failed-Run: Run failed or interrupted. Decision must be Invalid or Needs-Rerun.
+      - If run deviated from protocol, downgrade evidence grade and record deviation
 
-      Be factual and complete. This is the record that supports the resolution.
+      Sections:
+      - **Run Identity**: Run ID, timestamp, machine, git commit, environment
+      - **Run Records**: Table of steps (Smoke, Full) with command, duration, status, notes
+      - **Commands Run**: Exact commands with seeds, versions, environment variables
+      - **Configs Used**: Final config values (must match protocol or deviation recorded)
+      - **Commits**: Git SHAs for code reproducibility
+      - **Metrics Observed**: Table with metric, value, expected, delta, notes
+      - **Evidence Grade**: Smoke | Partial-Run | Full-Protocol | Failed-Run
+      - **Protocol Satisfaction**: Satisfies Protocol | Deviates From Protocol | Does Not Satisfy Protocol
+      - **Deviations from Protocol**: Table of what changed, why, impact on validity
+      - **Claims Invalidated During Run**: Any hypothesis claims invalidated by the run
+      - **Implementation Issues Found**: Bugs, data issues, infrastructure problems
+      - **Validity Assessment**: Valid | Conditionally Valid | Invalid
+      - **Artifacts Produced**: Checkpoints, logs, visualizations with paths and hashes
+      - **Samples**: Representative outputs (good and bad)
 
   - id: resolution
     generates: resolution.md
@@ -107,16 +112,27 @@ artifacts:
     instruction: |
       Conclude the experiment with a decision and next steps.
 
+      **CRITICAL RESOLUTION GATES:**
+      - Decision-Grade Evidence = No: Decision MUST be Inconclusive, Invalid, or Needs-Rerun
+      - Evidence Grade = Smoke or Partial-Run: Decision MUST be Inconclusive, Invalid, or Needs-Rerun
+      - Evidence Grade = Failed-Run: Decision MUST be Invalid or Needs-Rerun
+      - Decision = Accepted or Rejected: Requires Decision-Grade Evidence = Yes AND Evidence Grade = Full-Protocol AND Protocol Satisfaction = Satisfies Protocol
+
       Sections:
-      - **Decision**: One of:
-        - **Accepted**: Evidence supports the hypothesis; proceed with confidence.
-        - **Rejected**: Evidence does not support the hypothesis; iterate or abandon.
-        - **Inconclusive**: Evidence is insufficient to draw a conclusion; needs more data or better controls.
-        - **Invalid**: Experiment was flawed; must repeat with fixes.
-        - **Needs-rerun**: Technical issues prevented valid results; rerun with fixes.
-      - **Evidence Summary**: Brief synthesis of key findings.
-      - **Cost**: Compute/time actually consumed vs. budget.
-      - **Next Step**: What to do next (iterate, ship, abandon, document learnings).
+      - **Decision-Grade Evidence**: Yes | No
+        - Yes: Evidence is sufficient for Accepted/Rejected
+        - No: Use Inconclusive/Invalid/Needs-Rerun
+      - **Decision**: Accepted | Rejected | Inconclusive | Invalid | Needs-Rerun
+        - Accepted: Requires Full-Protocol + Protocol Satisfaction + Decision-Grade Evidence = Yes
+        - Rejected: Requires Full-Protocol + Protocol Satisfaction + Decision-Grade Evidence = Yes
+        - Inconclusive: Evidence insufficient or protocol not satisfied
+        - Invalid: Experiment flawed or protocol not satisfied
+        - Needs-Rerun: Technical issues prevented valid results
+      - **Basis**: Which evidence supports the decision
+      - **Protocol Compliance**: Compliant | Non-Compliant (with justification)
+      - **Evidence Summary**: Brief synthesis of key findings
+      - **Cost**: Compute/time consumed vs. budgeted
+      - **Next Action**: Archive | Rerun | Update Protocol | Open Follow-Up Change | Stop
 
       Decision should be defensible based on the evidence and aligned with the success criteria defined in protocol.
 

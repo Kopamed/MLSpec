@@ -1,3 +1,19 @@
+## Experiment Type
+
+<!-- One of: Baseline Establishment | Intervention Comparison | Ablation | Scaling Run | Bug-Fix | Reproduction Run -->
+
+<!-- Baseline Establishment: No prior baseline needed. Specify target/reference/acceptance thresholds. -->
+
+<!-- Intervention Comparison: Requires real baseline/comparator. -->
+
+<!-- Ablation: Requires full baseline run first. -->
+
+<!-- Scaling Run: Specifies scale dimensions and expected scaling behavior. -->
+
+<!-- Bug-Fix: Reproduces specific failure, then verifies fix. -->
+
+<!-- Reproduction Run: Reproduces published result, then compares. -->
+
 ## Hypothesis
 
 <!-- What you believe might be true and why. Be specific about the expected mechanism. -->
