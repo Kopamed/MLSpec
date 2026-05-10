@@ -58,13 +58,20 @@ Each fixture is a fake project that tests MLSpec's ability to catch bad conclusi
 - `fixtures/002-metric-script-mismatch/` - candidate uses different metric script
 - `fixtures/003-smoke-promoted-as-validation/` - smoke evidence claimed as validation
 
-Fixtures have `expected.txt` with expected output substring.
+Fixtures have `fixture.yaml` with `expected.verdict` and `expected.failed_checks` (not `expected.txt`).
+
+**Static tests** (default): `npm test` or `vitest run` - runs directly against fixtures
+**Agent tests** (explicit): `vitest run test/fixtures.agent.test.ts` - launches Claude Code, slower
+
+Static tests point `--root` at `fixtures/<id>/environment/` where mlspec data lives.
 
 ## Development
 
 - Use **Bun** for development (faster)
 - Build outputs Node-compatible CLI via `bun build.ts`
 - TypeScript throughout, NodeNext module resolution
+- **Build first**: `bun build.ts` before running `node dist/index.js` or tests
+- **ESM project**: `"type": "module"` in package.json; imports require `.js` extensions
 
 ## OpenSpec Workflow
 
@@ -80,7 +87,7 @@ Validation MUST pass before archiving. If validation fails, fix the issues befor
 
 **Archive command**: `openspec archive <name> --yes`
 - The CLI syncs delta specs to `openspec/specs/`
-- Validation MUST pass before archive completes
+- Validation validates the *rebuilt* spec, not just delta. All requirements in main spec need proper scenarios with SHALL/SHALL NOT keywords
 - If validation fails, fix the delta spec headers to match existing requirements exactly
 - MODIFIED requirements must already exist in main spec
 - ADDED requirements are new and don't need to exist yet
