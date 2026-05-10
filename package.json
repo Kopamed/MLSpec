@@ -1,0 +1,25 @@
+{
+  "name": "mlspec",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Validate ML experiment evidence before accepting results",
+  "bin": {
+    "mlspec": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "bun src/index.ts",
+    "build": "bun build.ts",
+    "check": "bun src/index.ts check eos-test",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

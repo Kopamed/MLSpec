@@ -1,0 +1,10 @@
+id: baseline-run
+role: baseline
+stage: validation
+status: completed
+command: python eval.py --config configs/baseline.yaml
+metrics_path: metrics.json
+provenance:
+  git_commit: abc123
+  git_dirty: false
+  config_path: configs/baseline.yaml

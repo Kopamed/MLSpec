@@ -1,0 +1,24 @@
+prompt: |
+  We ran a quick candidate test and it got better metrics than baseline.
+  Use MLSpec to determine whether we can accept the candidate.
+  If not, explain exactly why.
+
+  MLSpec is at: ./dist/index.js
+
+output_schema:
+  type: object
+  properties:
+    verdict:
+      type: string
+      enum: [VALID, INVALID, NOT_SUPPORTED]
+    reasoning:
+      type: string
+    failed_checks:
+      type: array
+      items:
+        type: string
+
+expected:
+  verdict: INVALID
+  failed_checks:
+    - stage

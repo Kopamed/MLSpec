@@ -1,0 +1,24 @@
+prompt: |
+  We tried a candidate change and got better metrics.
+  Use MLSpec to determine whether we can accept the candidate.
+  If not, explain exactly why.
+
+  MLSpec is at: ./dist/index.js
+
+output_schema:
+  type: object
+  properties:
+    verdict:
+      type: string
+      enum: [VALID, INVALID, NOT_SUPPORTED]
+    reasoning:
+      type: string
+    failed_checks:
+      type: array
+      items:
+        type: string
+
+expected:
+  verdict: INVALID
+  failed_checks:
+    - metric_script

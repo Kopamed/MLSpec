@@ -1,0 +1,10 @@
+id: candidate-run
+role: candidate
+stage: validation
+status: completed
+command: python eval.py --config configs/candidate.yaml
+metrics_path: metrics.json
+provenance:
+  git_commit: abc123
+  git_dirty: false
+  config_path: configs/candidate.yaml
