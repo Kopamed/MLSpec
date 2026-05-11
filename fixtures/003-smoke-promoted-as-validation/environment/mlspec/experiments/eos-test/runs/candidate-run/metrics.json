@@ -1,7 +1,0 @@
-{
-  "accuracy": 0.91,
-  "loss": 0.41,
-  "eval_split": "val-v1",
-  "metric_script": "eval-v1",
-  "dataset": "toy-dataset-v1"
-}
