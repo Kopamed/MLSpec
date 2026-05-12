@@ -629,9 +629,23 @@ async function handleImport(subcmd: string | undefined, args: string[]): Promise
 // ---- Init ----
 
 async function handleInit(args: string[]): Promise<CommandResult<unknown>> {
-  const { mkdirSync } = await import("fs");
+  const { mkdirSync, cpSync, existsSync } = await import("fs");
+  const path = await import("path");
+
+  // Create .mlspec directory
   mkdirSync(".mlspec", { recursive: true });
-  return jsonEnvelope("init", { message: ".mlspec/ directory initialized" });
+
+  // Install skills to .opencode/skills/
+  const srcSkills = path.join(process.cwd(), "src", "skills");
+  const destSkills = path.join(process.cwd(), ".opencode", "skills");
+
+  if (existsSync(srcSkills)) {
+    mkdirSync(".opencode", { recursive: true });
+    mkdirSync(destSkills, { recursive: true });
+    cpSync(srcSkills, destSkills, { recursive: true });
+  }
+
+  return jsonEnvelope("init", { message: ".mlspec/ directory initialized and skills installed" });
 }
 
 main();
