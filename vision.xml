@@ -1,0 +1,1577 @@
+<ideaollogy><overall># Designing MLSpec
+
+## Executive summary
+
+MLSpec should be designed as a **case-centric provenance and validity layer for ML experimentation**, not as another training framework, scheduler, notebook system, or generic experiment tracker. The strongest foundation is to combine the provenance core of entity["other","PROV","W3C provenance data model"] from the entity["organization","World Wide Web Consortium","web standards organization"], the adaptive “case file” model of entity["other","CMMN","Case Management Model and Notation standard"] from the entity["organization","Object Management Group","standards consortium"], run/artifact telemetry from entity["software","MLflow","machine learning experiment tracking platform"], orchestration metadata from entity["software","Kubeflow","Kubernetes-native ML workflow platform"], exploratory-history lessons from entity["software","VisTrails","scientific workflow and provenance management system"], and agent-trace extensions from PROV-AGENT. PROV supplies the minimal classes and relations; CMMN supplies adaptive case progression; MLflow and Kubeflow supply execution metadata; VisTrails shows the value of retaining full exploratory history; and PROV-AGENT shows that prompts, responses, decisions, and downstream effects must become first-class provenance when agents are involved. citeturn24view0turn25view0turn7view1turn15view1turn7view2turn23view0turn7view3turn14view0turn18view0turn18view3
+
+The right abstraction is therefore: **MLSpec = protocol + run provenance + compute-aware evidence grading + decision gating + agent traceability**. The system should keep a minimal, queryable internal model, then render human-facing projections such as markdown, YAML, or HTML. That recommendation is supported by the scientific-workflow literature, which treats provenance as queryable lineage and warns that provenance can become large enough to require selective capture, and by MLflow/Kubeflow, which both center queryable run/metadata stores rather than free-form narrative files. citeturn16view2turn12view2turn12view4turn14view0turn14view1
+
+The minimal kernel should be small: **Actor, Case, Protocol, Run, Artifact, MetricResult, Deviation, Evidence, Claim, Decision, and ActionLog**. Everything else should be projections or typed substructures. In PROV terms, Protocol is a plan-like entity; Run and ActionLog are activities; Actor is an agent; Artifact, MetricResult, Evidence, Claim, Decision, and Deviation are entities. In CMMN terms, Case is the evolving case file root, while readiness, execution, and resolution are lifecycle states gated by sentries and completion criteria. citeturn25view0turn25view1turn7view1turn11view0turn11view2
+
+The distinctive part of MLSpec should be its **compute-aware evidence rubric**. The entity["event","NeurIPS","machine learning conference"] checklist and subsequent reproducibility work emphasize recording exact run counts, hyperparameters, metrics, runtime or energy cost, computing infrastructure, and variation across runs; the broader reproducibility literature explicitly recommends multiple random seeds and reporting variance, while also noting that computational-resource limits are a major barrier to reproducibility. That means MLSpec should not treat “a run happened” as enough. Instead it should record whether the observed run consumed enough of the intended resource envelope—GPU-hours, data fraction, seeds, epochs, wall-clock time—to justify the claim being made. citeturn9view1turn7view8turn21view0
+
+Design and evaluation should follow **Design Science Research**: build an artifact, evaluate it rigorously against relevant failures, iterate as a search process, and communicate both the artifact and the method. For MLSpec, that means failure-driven modeling, adversarial fixtures, and audits that block unsupported conclusions automatically. citeturn17view0tun17view1turn17view2turn17view3turn17view4
+
+| MLSpec should be | MLSpec should not be |
+|---|---|
+| A local-first control plane for protocol, evidence, and decisions | A Kubernetes-first platform |
+| A provenance graph for runs, artifacts, and agent actions | A tracker that only logs metrics |
+| A decision gate that limits what conclusions are allowed | A scheduler or trainer |
+| A thin layer with adapters into trackers/orchestrators | A heavyweight MLOps stack |
+
+The table above is the central design conclusion of the source review and is especially consistent with the separation of concerns visible in PROV, CMMN, MLflow, Kubeflow, VisTrails, and PROV-AGENT. citeturn24view0turn25view0turn7view1turn7view2turn7view3turn15view1turn18view0
+
+## What existing systems already solve
+
+The systems below already solve large parts of the problem, but none of them solve the specific MLSpec wedge: **turning ML runs and agent actions into bounded, auditable experimental conclusions**. The matrix is a synthesis of the official documentation and primary papers cited after the table. citeturn24view0turn25view0turn7view1turn11view0turn11view2turn7view2turn23view0turn7view3turn14view0turn14view1turn14view2turn15view1turn18view0turn18view3
+
+| Source/system | Native strengths | Important gaps for MLSpec | Best reuse inside MLSpec |
+|---|---|---|---|
+| PROV | Minimal, interoperable provenance core: Entity, Activity, Agent; Used, WasGeneratedBy, WasDerivedFrom, WasAttributedTo, WasAssociatedWith; plans represented as entities | No ML-specific validity rules, no evidence grading, no resource semantics beyond whatever the application adds | Use as the ontology substrate and graph vocabulary |
+| CMMN | Case-centric modeling for unpredictable, knowledge-worker-driven work; case file; sentry-gated activation; explicit lifecycle states for tasks/stages | No ML metrics, no statistical validity, no run-resource semantics | Use for case/state/lifecycle ideas, not for notation adoption |
+| MLflow | Strong run-centric logging of parameters, code versions, metrics, artifacts; experiment grouping; run search; local default storage; system metrics for CPU/GPU/memory/network/disk | No protocol contract, no claim/decision semantics, no evidence-grade gating | Use as optional run/artifact/system-metrics backend |
+| Kubeflow | Strong orchestration layer: DAG pipelines on Kubernetes, immutable/self-contained runs, artifact passing, metadata store, lineage graph | Heavy infrastructure footprint; workflow execution focus; weak epistemic layer | Use as optional orchestrator/lineage source when infra exists |
+| VisTrails | Captures complete history of workflows, executions, and results; version diff/replay; strong exploratory provenance | Not agent-native, not ML-decision-focused, not built around modern tracker/orchestrator integration | Reuse its “keep the exploratory trail” philosophy |
+| PROV-AGENT | Brings prompts, responses, model invocations, decisions, and downstream impact into the provenance graph | Early and agent-centric; does not by itself solve ML evidence grading or decision policy | Use for ActionLog and agent-facing provenance requirements |
+
+The synthesis is straightforward: PROV supplies the **graph grammar**, CMMN supplies the **adaptive case shell**, MLflow and Kubeflow supply **execution exhaust**, VisTrails supplies **history retention**, and PROV-AGENT supplies **agent traceability**. MLSpec’s own contribution should sit on top of them as the **validity and decision layer**. citeturn24view0turn25view0turn7view1turn11view0turn7view2turn23view0turn7view3turn14view0turn15view1turn18view0turn18view3
+
+That same source mix also explains why MLSpec should stay lightweight. Scientific-workflow provenance is valuable because it makes results queryable, debuggable, and reproducible, but the literature also warns that provenance volume can exceed the original data and must therefore be selective. Kubeflow is inherently cluster- and orchestration-oriented; MLflow is more run-centric and can default to a local `mlruns` directory. The best reading is that MLSpec should keep only the metadata required to prevent invalid conclusions, while leaving heavy artifact storage and large-scale execution to external tools. citeturn16view2turn14view1turn12view3turn12view4
+
+## Proposed MLSpec semantic kernel
+
+A strong v0 should use a **queryable source of truth**—SQLite or append-only JSONL are reasonable defaults—and render markdown/YAML reports as projections. That is more robust than treating markdown as the data model, because the central source patterns here are graphs, queries, and lineage joins, not just narrative notes. PROV is explicitly graph-based; scientific-workflow provenance is queried and visualized; MLflow and Kubeflow both expose queryable run and metadata concepts; and VisTrails emphasizes replayable history rather than only current-state documents. citeturn24view0turn16view2turn12view2turn12view4turn14view0turn15view1
+
+Use the following scalar conventions in the kernel: `ID`, `Ref<T>`, `Enum[...]`, `Timestamp`, `URI`, `Digest`, `Map<String,Scalar>`, and a reusable `ResourceBudget = {gpu_hours: float, wallclock_hours: float, data_fraction: float[0,1], seeds: int, epochs: int, peak_vram_gb?: float, accelerator_type?: string}`. This schema is a proposed synthesis, derived from PROV’s entity/activity/agent core, CMMN’s case/lifecycle framing, MLflow’s run/experiment/artifact model, Kubeflow’s run/artifact/metadata concepts, and the reproducibility checklist’s emphasis on exact runs, metrics, infrastructure, and runtime/energy reporting. citeturn24view0turn25view0turn7view1turn7view2turn23view0turn14view0turn14view2turn9view1
+
+| Noun | Minimal fields and types | Why it should be first-class |
+|---|---|---|
+| `Actor` | `id`, `kind: Enum[human, agent, service]`, `name`, `version?`, `provider?` | Responsibility and traceability |
+| `Case` | `id`, `question`, `status: Enum[proposed, ready, running, observed, resolved, reopened, archived]`, `active_protocol_ref`, `owner_refs`, `created_at`, `tags` | Adaptive experiment root / case file |
+| `Protocol` | `id`, `case_ref`, `version`, `objective`, `baseline_spec`, `dataset_specs`, `metric_specs`, `planned_resources: ResourceBudget`, `min_decision_grade`, `acceptance_rule`, `locked_at?` | Experimental contract; PROV-like plan |
+| `Run` | `id`, `case_ref`, `protocol_ref`, `run_kind: Enum[smoke, proxy, full, replication]`, `status: Enum[planned, queued, running, completed, failed, aborted]`, `tracker_refs`, `started_at`, `ended_at`, `command`, `commit_hash`, `environment_digest`, `input_artifact_refs`, `output_artifact_refs`, `actual_resources: ResourceBudget`, `interrupt_reason?` | Executed attempt |
+| `Artifact` | `id`, `kind: Enum[code, config, dataset, split_manifest, checkpoint, log, report, prompt, response, model, metrics_blob]`, `uri`, `digest`, `produced_by_run_ref?`, `metadata` | Immutable lineage node |
+| `MetricResult` | `id`, `run_ref`, `name`, `split`, `value`, `direction`, `aggregation`, `dispersion?`, `seed?`, `evaluator_artifact_ref` | Comparison-ready metric atom |
+| `Deviation` | `id`, `run_ref`, `category`, `severity: Enum[minor, material, fatal]`, `description`, `declared_by_actor_ref`, `impact: Enum[none, weakens, invalidates]`, `resolved: bool` | Captures protocol drift explicitly |
+| `Evidence` | `id`, `case_ref`, `run_refs`, `metric_result_refs`, `artifact_refs`, `deviation_refs`, `grade: Enum[smoke, proxy, partial, decision_grade, replicated, invalid]`, `scope`, `protocol_satisfied: Enum[yes, partial, no]`, `summary` | Converts raw run exhaust into classified support |
+| `Claim` | `id`, `case_ref`, `statement`, `scope`, `comparator`, `expected_direction?`, `evidence_refs` | What is actually being asserted |
+| `Decision` | `id`, `case_ref`, `claim_ref`, `status: Enum[accept, reject, inconclusive, rerun, archive]`, `rationale`, `evidence_refs`, `decided_by_actor_ref`, `decided_at` | Final allowed conclusion |
+| `ActionLog` | `id`, `actor_ref`, `action_type`, `target_ref`, `parent_action_ref?`, `prompt_artifact_ref?`, `command?`, `started_at`, `ended_at`, `stdout_artifact_ref?`, `stderr_artifact_ref?` | Agent/human execution trace |
+
+If the system must be reduced further for a first prototype, the least harmful compression is to nest `MetricResult` inside `Evidence` and `ActionLog` inside `Run.events`; the least safe compression is to collapse `Protocol`, `Evidence`, `Claim`, and `Decision`, because those are exactly the layers that separate “what happened” from “what is allowed to be concluded.” That separation is consistent with PROV’s distinction between activities, entities, agents, and plans, with CMMN’s case/lifecycle separation, and with reproducibility guidance that distinguishes procedure, evaluation, and reporting. citeturn24view0turn25view0turn7view1turn9view1turn21view0
+
+The ontology below shows the recommended provenance spine, with explicit mapping back to PROV concepts. citeturn24view0turn25view0turn18view3
+
+```mermaid
+flowchart LR
+  Actor{{Actor\nprov:Agent}}
+  Action[ActionLog\nprov:Activity]
+  Case[(Case)]
+  Protocol[[Protocol\nprov:Plan]]
+  Run[Run\nprov:Activity]
+  Artifact[(Artifact\nprov:Entity)]
+  Metric[(MetricResult\nprov:Entity)]
+  Deviation[(Deviation\nprov:Entity)]
+  Evidence[(Evidence\nprov:Entity)]
+  Claim[(Claim\nprov:Entity)]
+  Decision[(Decision\nprov:Entity)]
+
+  Case -->|has current| Protocol
+  Actor -->|performs| Action
+  Action -->|creates/updates| Case
+  Action -->|creates/updates| Protocol
+  Protocol -->|governs| Run
+  Run -->|uses| Artifact
+  Run -->|generates| Artifact
+  Run -->|generates| Metric
+  Run -->|records| Deviation
+  Evidence -->|cites| Run
+  Evidence -->|cites| Metric
+  Evidence -->|cites| Artifact
+  Evidence -->|accounts for| Deviation
+  Claim -->|supported/refuted by| Evidence
+  Decision -->|resolves| Claim
+  Decision -->|must cite| Evidence
+```
+
+The state model should likewise be explicit. CMMN is helpful here because it models work that becomes available, is enabled or activated, can fail or terminate, and only completes when completion conditions are satisfied; Kubeflow and MLflow both treat runs as concrete execution records that can be queried and inspected. MLSpec should therefore use lifecycle gates that are stricter than “artifact exists.” citeturn11view2turn14view1turn12view2
+
+```mermaid
+stateDiagram-v2
+  [*] --> Planned
+  Planned --> Running: run_started
+  Running --> Completed: success
+  Running --> Failed: exception
+  Running --> Aborted: stop
+
+  Completed --> Smoke: evidence_classified
+  Completed --> Proxy: evidence_classified
+  Completed --> Partial: evidence_classified
+  Completed --> DecisionGrade: evidence_classified
+  Completed --> Replicated: evidence_classified
+
+  Failed --> Invalid: evidence_classified
+  Aborted --> Invalid: evidence_classified
+
+  Smoke --> Inconclusive: decide
+  Proxy --> Inconclusive: decide
+  Partial --> Inconclusive: decide
+  Partial --> NeedsRerun: decide
+  DecisionGrade --> Accept: decide_positive
+  DecisionGrade --> Reject: decide_negative
+  Replicated --> Accept: decide_positive
+  Replicated --> Reject: decide_negative
+  Invalid --> NeedsRerun: decide
+```
+
+| Object | States | Gate to move forward | Key invariant |
+|---|---|---|---|
+| `Case` | proposed → ready → running → observed → resolved → reopened/archive | protocol lock, at least one run, evidence recorded, decision issued | case cannot be `ready` without an active protocol |
+| `Run` | planned → queued → running → completed / failed / aborted | command started, tracker id attached, completion status known | protocol version must be immutable once run starts |
+| `Evidence` | unclassified → smoke / proxy / partial / decision_grade / replicated / invalid | run resources, comparator validity, deviations, evaluation completeness | evidence grade is about **strength**, not whether the result is positive or negative |
+| `Decision` | pending → accept / reject / inconclusive / rerun / archive | cited evidence has minimum required grade and matching scope | no decision may exist without explicit evidence references |
+
+The non-negotiable invariants should be simple and machine-checkable: a decision must cite evidence; evidence must cite observed runs rather than planned work; metric comparisons require identical split and evaluator definitions; any material unresolved deviation caps evidence at `partial`; any fatal deviation or lineage hole makes evidence `invalid`; and `decision_grade` requires actual resource reporting, not just intended budget. Those invariants are direct answers to the failure patterns surfaced by the provenance, workflow, and reproducibility sources. citeturn16view2turn9view1turn21view0turn18view0
+
+## Failure taxonomy and required provenance
+
+The most reliable way to derive MLSpec is to derive it **from failure**. The literature supports this direction indirectly but strongly: provenance exists to answer lineage questions and aid debugging; design-science treats artifact improvement as an iterative search-and-evaluation process; reproducibility guidance emphasizes under-specification, metric ambiguity, incomplete reporting, randomness, and hidden compute constraints as recurring failure sources. The table below turns that into an operational failure taxonomy for MLSpec. citeturn16view2turn17view2turn17view4turn9view1turn21view0
+
+| Failure category | Typical examples | Required provenance fields | Minimum automated gate |
+|---|---|---|---|
+| Identity and versioning holes | orphan checkpoint; config edited after run; result copied without origin | `artifact.digest`, `produced_by_run_ref`, `commit_hash`, `config_digest`, `created_at` | reject orphan or mutable evidence |
+| Data lineage and split integrity | wrong eval split; train/test leakage; changed preprocessing | `dataset_digest`, `split_manifest_digest`, `preprocessing_artifact_ref`, `dataset_version`, `row_count` | forbid comparison if split/preprocessing digests differ |
+| Metric and evaluator mismatch | same metric name, different script or threshold; aggregate mismatch | `metric_name`, `direction`, `aggregation`, `evaluator_artifact_ref`, `evaluator_digest`, `split` | forbid comparison if evaluator digests differ |
+| Protocol drift | fewer epochs than planned; different augmentation; manual tweak not logged | `protocol_ref`, `protocol_version`, `deviation_refs`, `severity`, `impact`, `approved_override?` | unresolved material deviation caps evidence below decision-grade |
+| Resource under-run or interruption | 10% data treated as final; fewer seeds; OOM; early stop; reduced resolution proxy | `actual_resources`, `interrupt_reason`, `resume_chain`, `gpu_hours`, `data_fraction`, `epochs`, `seeds` | compute ratio and interruption status set max evidence grade |
+| Statistical weakness and cherry-picking | single-seed superiority claim; best-of-n run selected silently; no variance | `seed_list`, `n_runs`, `aggregation`, `dispersion`, `selection_rule`, `confidence_interval?` | no decision-grade without required run count and variation metadata |
+| Comparator or baseline invalidity | missing baseline; incomparable baseline; baseline run used different split or metric | `baseline_run_refs`, `comparator_type`, `shared_split_manifest`, `shared_metric_spec`, `shared_budget_class` | comparison claims require matched baseline metadata |
+| Environment and infrastructure mismatch | CUDA/driver drift; different container; hardware nondeterminism hidden | `environment_digest`, `container_image_digest`, `dependency_lock_digest`, `accelerator_type`, `driver_versions` | environment diff emits warning or blocks strict comparability |
+| Agent traceability failure | agent cites planned run as evidence; invents result from logs; hides failed command | `actor_ref`, `action_logs`, `prompt_artifact_ref`, `command`, `stdout/stderr_artifacts`, `decision.evidence_refs` | planned work cannot be evidence; decisions require trace-complete action logs |
+
+Two design implications matter most. First, most failures are prevented by **recording digests and references**, not by storing huge blobs in the core store. Second, a lightweight system should store canonical URIs and hashes for large artifacts while keeping the actual artifacts in filesystem/object storage or external trackers. That is exactly the right response to the scientific-workflow finding that provenance data can exceed the size of the original data and therefore must be captured selectively. citeturn16view2
+
+A useful rule of thumb is: if a field cannot help answer either **“what produced this?”** or **“what conclusion is allowed?”**, it probably should not be in the kernel. That rule is consistent with PROV’s focus on production/use/responsibility and with Design Science Research’s emphasis on purposeful artifacts rather than arbitrarily complex representations. citeturn24view0turn17view0
+
+## Compute-aware evidence, decisions, and audit
+
+The evidence system should treat **resource consumption as part of epistemic strength**. That is not because bigger runs are always better, but because the primary sources repeatedly tie credibility to reporting exact runs, infrastructure, runtime or energy cost, and variance across runs, while also identifying compute limits as a practical reproducibility barrier. A lightweight MLSpec therefore needs a simple, default rubric that turns intended budget and observed budget into a cap on what can be claimed. citeturn9view1turn21view0
+
+The recommended default is to compare observed resources against the protocol target and use the **minimum completeness ratio** across the key dimensions: `gpu_hours`, `data_fraction`, `epochs`, and `seeds`. Domain-specific protocols can override the exact thresholds, but the defaults below are a strong v0. This is a proposed rubric, informed by reproducibility and reporting guidance rather than copied from a single existing standard. citeturn9view1turn21view0
+
+| Evidence grade | Default resource profile | Additional conditions | What it can justify |
+|---|---|---|---|
+| `smoke` | `< 0.10` of planned GPU-hours **or** no real evaluation **or** dry-run/sanity-only | may have no valid comparator | wiring, shape, instrumentation, obvious crash/no-crash facts |
+| `proxy` | `0.10–0.30` of planned compute **or** reduced data/resolution/task proxy | comparator helpful but not required | “worth a full run,” “likely broken,” “directionally promising” |
+| `partial` | `0.30–0.99` of planned compute **or** full compute with missing baseline / missing variance / unresolved material deviation | split and metric should still be explicit | bounded, preliminary claims under a narrow stated scope |
+| `decision_grade` | `>= 1.00` of required compute envelope on full intended split/data/epochs with required seeds | matched baseline, evaluator digest, variance reporting, no unresolved material deviation | accept/reject **for this exact protocol scope** |
+| `replicated` | `decision_grade` plus independent rerun, second seed bundle, or second environment/dataset slice specified by protocol | replication strategy explicit | stronger internal default changes; external communication candidate |
+| `invalid` | any fatal deviation, lineage hole, noncomparable baseline, or leakage | none | only diagnostic conclusions and rerun requests |
+
+The rubric should be interpreted conservatively. A positive full-budget result and a negative full-budget result are both `decision_grade` if they satisfy the protocol; evidence grade measures **strength**, not optimism. Conversely, a partial result that looks amazing is still partial if seeds, split, baseline, or resource envelope are insufficient. That distinction is exactly what is missing from pure run trackers. citeturn7view2turn14view1turn9view1turn21view0
+
+| Decision status | Minimum evidence requirement | Allowed conclusion form |
+|---|---|---|
+| `accept` | at least one cited `decision_grade` or `replicated` evidence item, all comparability checks pass | “Under protocol P.vN, on scope S, change X is accepted.” |
+| `reject` | same as `accept`, but the claim is negatively supported | “Under protocol P.vN, change X is rejected for scope S.” |
+| `inconclusive` | any `smoke`, `proxy`, or `partial` evidence, or conflicting evidence | “Observed signal exists, but protocol-grade conclusion is not yet allowed.” |
+| `rerun` | `invalid` evidence, interrupted run, unresolved deviation, or insufficient run count | “No valid decision; rerun required with stated corrections.” |
+| `archive` | superseded case, abandoned line of inquiry, or administratively closed work | “Case closed without a live decision target.” |
+
+The audit layer should query for invariant violations, not just missing files. The queries below are the minimum useful set for v0 and are directly aligned with the failure taxonomy. They are design recommendations rather than claims about existing tools. citeturn17view2turn18view0
+
+| Audit query or check | Example logic | Failure caught |
+|---|---|---|
+| Unsupported decision | `decision.cited_evidence.grade < protocol.min_decision_grade` | overclaiming from weak evidence |
+| Non-comparable comparison | split/evaluator/baseline digests differ across compared runs | invalid superiority claims |
+| Underpowered “full” run | `run_kind='full'` but observed `data_fraction`, `epochs`, `seeds`, or `gpu_hours` below protocol minimum | proxy or partial run misrepresented as final |
+| Orphan artifact | artifact has no `produced_by_run_ref` or no digest | untraceable outputs |
+| Fatal deviation leakage | evidence grade ≥ `decision_grade` but linked fatal/material deviation unresolved | invalid final decisions |
+| Agent trace gap | decision by an agent lacks prompt/command/stdout-stderr references | unverifiable agent reasoning/execution |
+| Future evidence | evidence cites a planned run or a run whose timestamps postdate the evidence record | fabricated or premature evidence |
+| Cherry-pick detector | multiple sibling runs exist, but claim cites only best run and no `selection_rule` | silent selection bias |
+
+In implementation terms, these checks should run at three moments: on `run end`, on `evidence classify`, and on `decide`. Early feedback catches missing metadata; late gating prevents epistemic overreach. That sequencing mirrors both workflow-lifecycle thinking and DSR’s emphasis on evaluating artifact utility in realistic use. citeturn11view2turn17view2
+
+## Agent-native interface and integrations
+
+The agent interface should be **small, typed, and refusal-oriented**. PROV-AGENT is the clearest primary source here: in agentic workflows, the provenance system needs to capture prompts, responses, decisions, model invocations, and their downstream effects, because unsupported agent decisions can propagate errors across the rest of the workflow. MLSpec should therefore expose a CLI that makes valid transitions easy and invalid transitions hard. citeturn18view0turn18view3
+
+A good v0 command surface is eight primitives:
+
+| Primitive | Required inputs | Core invariant it enforces |
+|---|---|---|
+| `mlspec case create` | question, owner, tags | every experiment begins as an explicit case |
+| `mlspec protocol lock` | case id, protocol body, baseline spec, metric specs, planned resources | runs cannot start against a mutable protocol |
+| `mlspec run begin` | protocol id, command, tracker refs optional | captures commit/config/environment before execution |
+| `mlspec run end` | run id, status, outputs, actual resources | no completed run without observed resources and artifacts |
+| `mlspec evidence classify` | run id(s), metric refs, comparator refs | evidence grade cannot exceed resource/deviation cap |
+| `mlspec claim draft` | case id, statement, scope, comparator | claims must be explicit and scoped |
+| `mlspec decide` | claim id, evidence refs, rationale | no decision without valid cited evidence |
+| `mlspec audit` | case or run scope | checks invariants and emits machine-readable failures |
+
+The most important agent prompts are not long. They are structured preflight questions that force the agent to surface missing context instead of improvising. PROV-AGENT strongly supports making prompts and responses first-class artifacts, and the reproducibility sources strongly support requiring explicit protocol, metric, split, run-count, and infrastructure context. citeturn18view0turn18view3turn9view1turn21view0
+
+```text
+PRE-RUN GUARDRAIL
+- What protocol version am I acting under?
+- What exact command will run, and what commit/config/dataset digests will be attached?
+- Is this run smoke, proxy, full, or replication?
+- What evidence grade could this run support at most, even if metrics look good?
+
+POST-RUN GUARDRAIL
+- What was actually observed?
+- What resources were actually consumed: GPU-hours, data fraction, epochs, seeds, wall-clock?
+- What deviations occurred?
+- Which artifacts and metric results were produced, with digests and evaluator versions?
+
+DECISION GUARDRAIL
+- Which evidence ids support this claim?
+- Are split, metric, and baseline definitions comparable across cited runs?
+- Does the maximum allowed evidence grade permit the requested decision?
+- If any field is missing, return INSUFFICIENT_EVIDENCE instead of a conclusion.
+```
+
+MLflow and Kubeflow should be treated as adapters, not dependencies. The design below keeps MLSpec as the owner of protocol/evidence/decision semantics while pulling execution and telemetry from those backends when available. This separation matches the official docs: MLflow centers runs, experiments, artifacts, and system metrics; Kubeflow centers pipelines, runs, metadata stores, artifacts, and lineage graphs. citeturn7view2turn23view0turn14view1turn14view0turn14view2
+
+| MLSpec concept | MLflow mapping | Kubeflow mapping | Recommended ownership |
+|---|---|---|---|
+| `Protocol` | experiment tags or run tags pointing to protocol version | pipeline spec/version or external reference in run metadata | owned by MLSpec |
+| `Run` | MLflow run id, params, metrics, artifacts, start/end times | Kubeflow run id, pipeline/run graph, logs, output artifacts | observed from adapter, normalized by MLSpec |
+| `Artifact` | artifact URI and metadata; model/checkpoint outputs | artifact URI, metadata, MLMD lineage nodes | canonical ref stored by MLSpec |
+| `Actual resources` | system metrics: CPU/GPU/memory/network/disk; runtime | task status, telemetry/, node-level metadata where available via MLMD/cluster sources | normalized into `actual_resources` |
+| `Evidence/Claim/Decision` | at most mirrored back as tags or artifacts | at most mirrored back as annotations | owned only by MLSpec |
+| Search/audit | `search_runs` and experiment queries | metadata store and lineage graph traversal | cross-system audit issued from MLSpec |
+
+The practical consequence is simple: MLSpec should ingest from external systems, but **never outsource claim validity to them**. MLflow can tell you what a run logged; Kubeflow can tell you what a pipeline executed; only MLSpec should tell you whether the resulting conclusion is allowed. citeturn12view2turn14view1turn14view0
+
+## Evaluation plan and practical next steps
+
+The evaluation method should explicitly follow Design Science Research: produce a viable artifact, solve a relevant problem, evaluate it rigorously, maintain rigor in construction and evaluation, and iterate as a search process. For MLSpec, that means a prototype is successful only if it blocks or flags invalid conclusions in adversarial experiment histories. citeturn17view0turn17view1turn17view2turn17view3turn17view4
+
+A sensible minimal prototype can be built in five milestones:
+
+| Milestone | Deliverable | Exit criterion |
+|---|---|---|
+| Kernel | typed schema for the 11 core nouns + validator | every object can be created, linked, and exported/imported |
+| Gating | evidence classifier + decision matrix | impossible to accept/reject without cited evidence |
+| Audit | invariant engine + machine-readable failures | all known fixture failures are caught |
+| Adapter | MLflow ingest first, Kubeflow later | imported runs become normalized MLSpec runs |
+| Agent shell | CLI + guardrail prompts + ActionLog capture | agent actions are replayable and attributable |
+
+The initial fixture set should be deliberately adversarial:
+
+| Fixture | Expected result |
+|---|---|
+| smoke run overclaimed as final | blocked at `evidence classify` or `decide` |
+| wrong split manifest | comparison audit failure |
+| evaluator script changed | comparison audit failure |
+| baseline missing | claim cannot be comparative |
+| config edited after run | lineage/immutability failure |
+| partial-data run marked full | resource-grade downgrade |
+| interrupted/OOM run treated as complete | invalid or rerun required |
+| single-seed cherry-pick | no decision-grade evidence |
+| orphan checkpoint imported from tracker | artifact audit failure |
+| agent cites planned run as evidence | future-evidence failure |
+| Kubeflow recurring run with changed parameters but same claim | protocol/version mismatch |
+| MLflow run lacking commit or environment digest | lineage completeness failure |
+
+The most important source list, in recommended reading order, is below. These are the sources with the highest design leverage for a first implementation, and they are intentionally biased toward primary or official material.
+
+| Priority | Source | Why it matters first |
+|---|---|---|
+| highest | urlPROV-DMturn1search0 | Minimal provenance ontology and relations |
+| highest | urlCMMN overviewturn0search1 and urlCMMN specificationturn0search5 | Case-file and lifecycle ideas for adaptive work |
+| high | urlMLflow Tracking docsturn0search2 and urlMLflow System Metrics docsturn22search0 | What a modern lightweight tracker already gives you |
+| high | urlKubeflow Pipelines docsturn0search19, urlKubeflow run docsturn13search12, and urlKubeflow ML Metadata docsturn13search0 | What orchestration and lineage look like when infra exists |
+| high | urlVisTrailsturn1search1 | Why exploratory history should not be discarded |
+| high | urlPROV-AGENT paperturn2search0 | How to make prompts, responses, and agent decisions first-class |
+| medium | urlDesign Science in Information Systems Researchturn1search14 | Build/evaluate/iterate discipline for MLSpec itself |
+| medium | urlMachine Learning Reproducibility Checklist v2.0turn6search2 and urlJMLR report on the NeurIPS reproducibility programturn6search18 | Concrete reporting fields MLSpec should require |
+| medium | urlScientific Workflows and Provenanceturn1search7 | Why provenance, scaling, adaptation, and selective capture matter |
+
+Because infrastructure constraints are unspecified, the safest default is: **local-first, append-only metadata store; large artifacts external; MLflow adapter first; Kubeflow adapter optional; markdown exported as views**. That keeps the system lightweight while still matching the provenance, workflow, and reproducibility requirements that the source review makes hard to ignore. citeturn16view2turn12view4turn14view0turn14view1</overall><UX># MLSpec UX and Agent Control Design
+
+## Executive summary
+
+The right UX for MLSpec is **not** “humans use a strict CLI for everything.” It is **chat-first, agent-mediated, policy-backed experimentation**: the human mostly speaks in high-level intents, the agent plans and executes bounded skills, and the CLI acts as the trusted control plane that records provenance, enforces invariants, and blocks unsupported conclusions. This design follows naturally from the provenance-first posture of the urlPROV-DM standardturn1search0, the adaptive case-file model of urlCMMNturn0search5, the run-centric telemetry model in urlMLflow docsturn0search2 and urlMLflow system metrics docsturn22search0, the orchestration/lineage model in urlKubeflow docsturn0search19 and urlKubeflow ML Metadata docsturn13search0, the history-preserving philosophy of urlVisTrailsturn1search1, and the explicit prompt/response/decision traceability proposed by urlPROV-AGENTturn2search0. citeturn1search0turn0search5turn0search2turn22search0turn0search19turn13search0turn1search1turn2search0
+
+The key UX principle is **tiered rigidity**. Exploration should be fluid. Claims should not. A human should be able to jump around, try fast ideas, patch code, and run cheap checks with minimal ceremony; but crossing the boundaries into protocol-grade evidence and final decisions should invoke hard gates: immutable protocol version, captured code/config/data fingerprints, explicit resource accounting, evidence classification, and audit before acceptance or rejection. That split is strongly supported by the scientific-workflow literature, which values exploratory iteration and provenance retention, and by reproducibility guidance, which emphasizes exact reporting of runs, hyperparameters, compute, infrastructure, and variation across runs before drawing conclusions. citeturn1search1turn1search7turn6search2turn6search18
+
+The separation of responsibility should therefore be sharp. The **human** supplies intent, priorities, risk tolerance, and final judgment on what matters. The **agent** plans, edits code, runs tests, proposes protocols, executes runs, and drafts claims through skills. The **CLI** owns state transitions, snapshots, audits, and policy enforcement. The **repo/tracker/orchestrator** owns code execution and artifact storage. That is the design that best accounts for agent weaknesses such as laziness, overclaiming, and weak long-term tracking, while still preserving the speed benefits of agentic work. citeturn2search0turn1search14turn6search2
+
+## The core UX principle
+
+MLSpec should be designed around one sentence:
+
+> **Humans talk to the agent; the agent talks to the CLI; the CLI talks to the state model.**
+
+That is the cleanest way to keep the human interface fluid while keeping the system itself trustworthy. It fits PROV’s separation between agents, activities, and entities, and it fits CMMN’s model of adaptive, knowledge-worker-driven cases rather than rigid assembly lines. citeturn1search0turn0search5
+
+```mermaid
+flowchart LR
+  H[Human intent]
+  A[Agent planner/executor]
+  S[Agent skills]
+  C[MLSpec CLI control plane]
+  M[(MLSpec state store)]
+  R[Repo / tests / scripts]
+  T[Tracker or orchestrator]
+  D[Decision and audit output]
+
+  H --> A
+  A --> S
+  S --> C
+  S --> R
+  R --> T
+  C --> M
+  T --> C
+  R --> C
+  M --> D
+  C --> D
+  D --> A
+  A --> H
+```
+
+The implication is important: the CLI is **not** the main user experience. It is the **safety-critical API**. Most users should almost never touch it directly except to inspect state, recover from agent failure, or perform power-user debugging. The default experience should be a conversation with an agent that is visibly working inside a bounded protocol. That recommendation is a design synthesis, but it is grounded by the combination of adaptive case management in CMMN, provenance capture in PROV, and agent-trace requirements in PROV-AGENT. citeturn0search5turn1search0turn2search0
+
+The right answer to “how rigid versus fluid should the workflow be?” is therefore **neither fully rigid nor fully fluid**. It should be **fluid in exploration, rigid at boundary crossings**. That boundary-focused design mirrors the reporting and validation emphasis in the reproducibility checklist and the broader design-science view that artifacts should constrain exactly the parts of the process where failure is costly. citeturn6search2turn1search14
+
+| Mode | Human experience | Agent freedom | CLI strictness | Allowed conclusions |
+|---|---|---|---|---|
+| Scratch | “Try things fast” | high | low-to-medium | only local/debug conclusions |
+| Structured | “Run this as a real candidate experiment” | medium | high | bounded preliminary claims |
+| Decision | “Tell me whether to accept/reject this change” | low | very high | protocol-scoped accept/reject |
+
+This three-mode structure is a design recommendation, but it directly operationalizes the difference between exploratory workflow history, protocol-strength evidence, and final decisions that the sources collectively point toward. citeturn1search1turn1search7turn6search2
+
+## Division of responsibility
+
+The most important implementation decision is to decide who is allowed to do what.
+
+The table below is the recommended responsibility split. It is a synthesis built from the source set: PROV contributes responsibility and lineage, CMMN contributes case progression, MLflow and Kubeflow contribute run/artifact/system metadata patterns, and PROV-AGENT contributes explicit agent-action traces. citeturn1search0turn0search5turn0search2turn22search0turn0search19turn13search0turn2search0
+
+| Layer | Primary responsibility | Must never do |
+|---|---|---|
+| Human | set goals, approve priorities, choose tradeoffs, decide when “good enough” matters | manually assert unsupported conclusions into MLSpec state |
+| Agent | plan next actions, edit code, run skills, summarize evidence, request decisions | mutate MLSpec state by bypassing the CLI or silently ignore failed checks |
+| CLI | create/update/query case state, bind runs to protocol versions, record fingerprints, classify evidence, enforce invariants, audit | make scientific judgments using free-form language or edit code |
+| Repo and test harness | compile, run tests, train/eval models, generate artifacts | decide whether results are valid |
+| Tracker/orchestrator | store run metadata, logs, artifacts, execution graphs | determine accept/reject semantics |
+
+That split gives the CLI a very specific job: **be the narrow waist between flexible agent behavior and durable experimental truth**. In other words, the CLI should be responsible for any action that changes authoritative MLSpec state, and the agent should be responsible for the messy work of getting there. That recommendation is highly consistent with official tracker/orchestrator docs, which already treat telemetry and execution as separate concerns from interpretation. citeturn0search2turn22search0turn0search19turn13search0
+
+The CLI should therefore own at least six categories of responsibility:
+
+| CLI responsibility | Why it belongs in the CLI |
+|---|---|
+| State transitions | transitions must be typed and auditable |
+| Immutable snapshots | protocol, commit, config, and dataset bindings must not be free-form |
+| Evidence grading | this is policy, not narrative |
+| Decision gating | accept/reject requires invariant checks |
+| Audit and queries | consistency checks need deterministic execution |
+| Integration adapters | external run data must be normalized before it becomes evidence |
+
+By contrast, the agent should own five categories of responsibility:
+
+| Agent responsibility | Why it belongs in the agent |
+|---|---|
+| Planning and decomposition | high-level reasoning is the agent’s comparative advantage |
+| Code modification | editing and iterating are flexible, local tasks |
+| Cheap validation | unit tests, lint, smoke checks, shape checks are part of active iteration |
+| Skill orchestration | one human request often spans many small operations |
+| Explanation | humans need conversational summaries, options, and tradeoffs |
+
+The agent should **not** be treated as trustworthy long-term memory. PROV-AGENT’s core motivation is precisely that prompts, responses, and downstream actions need traceability because agent choices can propagate errors through a workflow. MLSpec should internalize that premise and assume the agent can forget, drift, shortcut, or rationalize. citeturn2search0
+
+## Commands, skills, CLI primitives, and prompts
+
+The system will stay confusing unless these four layers are separated cleanly:
+
+| Layer | What it is | Example |
+|---|---|---|
+| Human request | natural-language intent from the human | “Try label smoothing and tell me if it’s worth a full run.” |
+| Agent skill | reusable multi-step procedure with preconditions and outputs | `skill.try_candidate_change` |
+| CLI primitive | deterministic state mutation/query | `mlspec run begin`, `mlspec evidence classify` |
+| Tool invocation | raw shell/script/tracker actions | `pytest`, `python train.py`, tracker API call |
+
+That separation is the UX missing piece. A human should ask for **outcomes**, not for CLI verbs. The agent should translate those outcomes into a bounded skill. The skill should invoke CLI primitives to commit authoritative state changes. This separation also matches Design Science Research’s view that artifacts should encode method, not just data. citeturn1search14
+
+A strong skill catalog for v0 would look like this:
+
+| Skill | Purpose | Typical steps | Outputs |
+|---|---|---|---|
+| `frame_case` | define or refine the question | inspect repo, ask for target metric/budget, draft case and protocol | case + protocol draft |
+| `import_project` | bring a brownfield repo under MLSpec | detect tracker, parse configs, infer datasets/splits, mark unknowns | imported case + lineage gaps |
+| `patch_code` | implement a candidate change | edit code, add/update tests, run local checks | patch + validation notes |
+| `run_sanity` | verify basic correctness cheaply | run lint/tests/smoke, shape checks, tiny train/eval | low-grade evidence or bug report |
+| `run_candidate` | execute a structured experiment | ensure clean snapshot, lock protocol, launch run, collect resources | run record |
+| `compare_to_baseline` | produce comparison-ready evidence | locate matched baseline, compare splits/metrics/resources | evidence draft |
+| `decide_case` | turn evidence into bounded conclusion | run audits, classify evidence, draft claim/decision | decision or rerun recommendation |
+| `handoff_state` | preserve context across sessions/agents | summarize current case, pending risks, next best actions | structured handoff |
+
+Each skill should have explicit preconditions and refusal conditions. For example, `decide_case` should refuse if there is no matched baseline, missing evaluator digest, unresolved material deviation, or insufficient run count. That refusal-oriented design is directly aligned with the purpose of provenance and audit: keep absent information absent instead of allowing the agent to fill it with narrative confidence. citeturn1search0turn1search7turn2search0
+
+The CLI itself should stay narrow and boring. A good v0 command set is below.
+
+| CLI primitive | Responsibility |
+|---|---|
+| `mlspec case create` | create case root |
+| `mlspec protocol draft` | write or update protocol draft |
+| `mlspec protocol lock` | freeze protocol version for evidence-bearing runs |
+| `mlspec workspace snapshot` | record commit, dirty state, config digests, env digest |
+| `mlspec run begin` | create run record bound to protocol + snapshot |
+| `mlspec run end` | finalize run outcome + actual resources + outputs |
+| `mlspec evidence classify` | convert runs and metrics into evidence grade |
+| `mlspec claim draft` | write explicit scoped claim |
+| `mlspec decision issue` | accept, reject, inconclusive, rerun, archive |
+| `mlspec audit` | run invariant checks |
+| `mlspec import` | ingest from trackers, logs, files, or existing repos |
+| `mlspec status` | summarize cases, risks, next actions |
+
+The CLI should **not** expose “free-form write anything” commands. If the CLI accepts unconstrained blobs for evidence or decisions, the whole system collapses back into markdown slop. The provenance and scientific-workflow sources both point toward typed, queryable lineage rather than purely narrative records. citeturn1search0turn1search7
+
+The agent prompts that matter most are not prose-heavy system prompts; they are short skill contracts. A good skill contract template is:
+
+```text
+SKILL CONTRACT
+Goal:
+Inputs:
+Preconditions:
+Default next steps:
+Required CLI mutations:
+Required local validations:
+Maximum allowed claim:
+Refuse if:
+Outputs:
+```
+
+That form is especially effective because it maps well to PROV-AGENT’s proposed modeling of prompts, model invocations, responses, and decisions as traceable workflow elements. citeturn2search0
+
+## User stories and workflow shapes
+
+The central UX answer is that the human usually works with **the agent as lab partner** and only rarely with the CLI directly. The human says what they want to learn or change. The agent proposes the next bounded move, executes it, and updates MLSpec through the CLI. The human only needs to intervene at ambiguity boundaries, priority changes, or decision boundaries. That is the most natural adaptation of adaptive case management to agentic engineering work. citeturn0search5turn2search0
+
+### Greenfield with nothing set up
+
+The greenfield user story should feel like this:
+
+1. The human says: *“I want to know whether loss reweighting helps on dataset D under a 12 GPU-hour cap.”*
+2. The agent inspects the repo or scaffolds one, identifies missing pieces, drafts a protocol, and proposes a baseline and metric.
+3. The agent creates an MLSpec case, drafts the protocol, and asks only the irreducible clarifying questions: target metric, compute cap, and success criterion.
+4. The agent writes or patches code, adds basic tests, runs smoke checks, and records low-grade evidence.
+5. Only when the code is stable enough does the agent lock the protocol, snapshot the workspace, and launch structured runs.
+6. The agent classifies evidence, compares against baseline, and either recommends a full run, a rerun, or a scoped decision.
+
+This flow is consistent with the source pattern that exploratory work should accumulate history, while robust conclusions require exact protocol, compute, and reporting context. citeturn1search1turn6search2turn6search18
+
+### Existing MLSpec project
+
+The existing-project user story should be lighter:
+
+1. The human says: *“Try label smoothing as a cheap ablation.”*
+2. The agent reads the live case, protocol, open hypotheses, prior runs, and resource budget.
+3. The agent decides whether this is scratch, structured, or decision mode.
+4. The agent patches code, runs existing tests, and either stays in exploratory mode or promotes the idea to a real candidate run.
+5. The agent updates the case and returns a concise summary: what changed, what evidence exists, what is still unknown, and the next cheapest informative step.
+
+This is where MLSpec should feel most efficient, because case/history/protocol already exist. The existence of a case file and queryable lineage is exactly what CMMN and scientific-workflow systems are meant to make easier. citeturn0search5turn1search7
+
+### Brownfield project with no MLSpec
+
+Brownfield is the most delicate story, because missing provenance should stay missing.
+
+1. The human says: *“Bring this repo under MLSpec and tell me what we can trust from prior results.”*
+2. The agent imports existing runs, logs, configs, tracker records, and artifacts.
+3. The agent tries to infer datasets, splits, metric evaluators, and baselines, but every inference gets a confidence label.
+4. Anything unverifiable becomes an explicit gap, not a filled-in guess.
+5. The agent creates imported evidence that is capped in grade by missing lineage.
+6. The agent recommends the minimal rerun set needed to upgrade legacy conclusions into protocol-grade evidence.
+
+That behavior is especially important because provenance systems are strongest when they preserve lineage explicitly, and weakest when they silently invent it after the fact. citeturn1search0turn1search7
+
+A practical summary of the three stories is below.
+
+| Scenario | Default interaction style | Biggest risk | MLSpec response |
+|---|---|---|---|
+| Greenfield | scaffold and guide | overdesign or missing baseline | start light, add protocol and baseline early |
+| Existing MLSpec | continue case work | stale assumptions or unnoticed drift | read state first, then act |
+| Brownfield | import and quarantine | fake lineage reconstruction | mark unknowns, cap evidence, propose reruns |
+
+The question “Can the human jump around fast?” is therefore very relevant. The answer is **yes, but only in the modes where the system makes clear that the resulting evidence is exploratory**. MLSpec should never punish speed; it should punish unsupported certainty. That is the core UX principle. It also aligns well with VisTrails’ emphasis on preserving exploratory history rather than forcing premature formalization. citeturn1search1
+
+## Code changes, correctness, and safety gates
+
+This is the part that has to account most directly for agent weaknesses.
+
+ML work almost always involves code changes: new model paths, new data transforms, new evaluation hooks, new baselines, bug fixes, instrumentation, or config changes. MLSpec should therefore treat **code modification as a first-class phase**, not as something outside the experiment process. The mistake would be to treat “implementation” and “experiment” as separate worlds. In practice, they interleave, but they should not be allowed to contaminate each other silently. The right model is: **code changes are fluid until a run is meant to count as evidence; then the workspace must be frozen and fingerprinted**. This is a design synthesis grounded in provenance, tracker metadata, and reproducibility reporting. citeturn1search0turn0search2turn6search2
+
+A robust implementation ladder is:
+
+| Phase | Purpose | Agent freedom | Required checks |
+|---|---|---|---|
+| Patch | modify code to realize idea | high | none beyond local sanity |
+| Validate | confirm implementation is not obviously broken | medium | tests, lint, shape/data checks |
+| Smoke | catch pipeline bugs cheaply | medium | tiny run, logs, metric presence |
+| Candidate | test protocol-compatible version | lower | clean snapshot, fixed config, bound resources |
+| Decision | support accept/reject judgment | lowest | full audit, matched baseline, evidence-grade gate |
+
+That ladder is the simplest way to prevent “something later got messed up and poisoned the result.” Every evidence-bearing run should be tied to a **workspace snapshot** that includes commit hash, dirty-tree status, tracked diff digest if dirty execution is allowed, config digests, environment digest, and dataset/split digests. After a run completes, subsequent code changes should never retroactively alter the meaning of that run; if the agent edits code again, that creates a new candidate state and any future evidence must cite the new snapshot. That rule is straight from the logic of provenance and tracker lineage. citeturn1search0turn0search2turn13search0
+
+The safety gates before a decision-grade run should be explicit:
+
+| Gate | What it blocks |
+|---|---|
+| clean or explicitly snapshotted workspace | hidden code drift |
+| locked protocol version | moving-target evaluation |
+| explicit baseline reference | ungrounded comparison |
+| evaluator digest attached | silent metric changes |
+| split manifest attached | leakage or noncomparable splits |
+| required tests passed | obvious implementation breakage |
+| resource budget declared | underpowered final claims |
+| previous deviations resolved or acknowledged | silent protocol drift |
+
+These gates are where MLSpec should be deliberately rigid. Everything before them can remain much more fluid. That division preserves speed without surrendering rigor. citeturn6search2turn6search18
+
+The agent-specific controls should be intentionally adversarial, because the user is right: agents can be lazy, fake completion, and lose track of long arcs. PROV-AGENT is relevant here because it treats prompts, responses, and decisions as provenance-bearing workflow elements rather than invisible internal cognition. MLSpec should build on that by requiring the following for high-stakes actions: captured command, captured stdout/stderr, explicit refusal to infer missing facts, periodic state summaries, and automatic comparison of the live workspace against the cited evidence snapshot. citeturn2search0
+
+A strong set of agent-failure countermeasures is:
+
+| Agent weakness | Countermeasure |
+|---|---|
+| forgets long-term context | structured `handoff_state` artifact after each major skill |
+| claims success from intention | no evidence from planned runs; only observed run ids may be cited |
+| hides failure output | stdout/stderr artifacts mandatory for failed and decision-grade runs |
+| gets lazy with testing | skill contracts require minimum local validation before evidence runs |
+| edits too much at once | worktree- or patch-scoped changes per candidate run |
+| overstates results | decision gate maps evidence grade to allowed conclusion form |
+| silently changes metric/eval | evaluator and split digests are compared automatically |
+
+The result should not be “trust the agent less by making it slow.” It should be “assume the agent is unreliable where provenance matters, and give it freedom elsewhere.” That is the right UX compromise.
+
+```mermaid
+stateDiagram-v2
+  [*] --> Scratch
+  Scratch --> Scratch: patch / test / tiny runs
+  Scratch --> Structured: promote_candidate
+  Structured --> Scratch: major redesign
+  Structured --> Decision: full protocol satisfied
+  Structured --> Structured: rerun / compare / refine
+  Decision --> Structured: audit fails or new change introduced
+  Decision --> Resolved: accept / reject / inconclusive
+```
+
+## Audit, evaluation, and the first usable prototype
+
+The best UX is useless if the audit layer is weak. The audit surface should answer the questions the human actually cares about:
+
+- **What changed?**
+- **What evidence do we have?**
+- **What are we allowed to conclude?**
+- **What is the cheapest next informative step?**
+
+That last question is especially important. A good agent should not just report invalidity; it should recommend the next minimal action that would upgrade the evidence. That kind of next-step guidance is a design recommendation, but it follows from the resource-aware evidence framing and the practical reality emphasized in reproducibility work that compute is limited and should be allocated deliberately. citeturn6search2
+
+The most useful UX-facing audit queries are:
+
+| Audit query | Why the human cares |
+|---|---|
+| “Why can’t I accept this result?” | makes the decision gate legible |
+| “What changed since the last evidence-bearing run?” | catches contamination from newer edits |
+| “What is missing for decision-grade evidence?” | tells the agent what to do next |
+| “Are my compared runs actually comparable?” | blocks misleading wins |
+| “What prior conclusions are now stale?” | handles brownfield drift and ongoing code evolution |
+| “What is the cheapest next run that improves certainty?” | aligns rigor with constrained compute |
+
+This is also where the adversarial fixture set should shift from purely data/provenance failures to **UX failures**.
+
+| Fixture | What it tests |
+|---|---|
+| agent says “done” after only code edits | separation between implementation and evidence |
+| agent cites a planned or failed run as support | evidence source validation |
+| agent compares against wrong split | comparison audit usability |
+| agent launches expensive run without baseline | budget-aware planning |
+| agent keeps editing code after a supposedly final run | snapshot contamination detection |
+| brownfield import silently backfills unknown dataset version | refusal to hallucinate lineage |
+| human asks for a quick answer and agent overclaims from proxy run | fluidity without fake certainty |
+| existing MLSpec case has stale protocol but agent fails to notice | read-state-before-act discipline |
+
+The first usable prototype should therefore be more UX-complete than feature-complete. A strong minimal stack is:
+
+| Component | Recommended v0 choice |
+|---|---|
+| state store | SQLite or append-only JSONL with typed validation |
+| CLI | thin typed control plane |
+| agent layer | chat interface plus skill contracts |
+| code execution | normal repo tooling and shell |
+| tracker integration | first-class adapter to urlMLflowturn0search2 |
+| orchestrator integration | optional adapter to urlKubeflowturn0search19 |
+| provenance export | PROV-like graph export for debug/inspection |
+| report views | markdown or HTML projections from state, never canonical source |
+
+That ordering matters. It is more important to get **skill contracts, workspace snapshots, evidence grading, and decision audits** right than to build many integrations early. The source base strongly supports that prioritization because provenance, reproducibility, and design-science rigor are where the hardest failures live, while execution tooling can be integrated incrementally. citeturn1search0turn1search14turn6search2
+
+## Recommended design decisions
+
+The design conclusions that seem highest-confidence from the source base and from the UX problem you raised are these:
+
+| Decision | Recommendation |
+|---|---|
+| Main user experience | chat with the agent, not direct CLI operation |
+| Trust boundary | CLI owns truth; agent owns effort |
+| Workflow style | tiered rigidity: fluid exploration, strict decision boundaries |
+| Unit of work | case-centric, not task-list-centric |
+| Code changes | first-class and expected, but frozen per evidence-bearing run |
+| Agent control | skills with preconditions, outputs, and refusal rules |
+| Brownfield support | import with explicit unknowns and evidence caps |
+| Default behavior under uncertainty | `INSUFFICIENT_EVIDENCE`, not narrative guessing |
+
+The single best implementation heuristic is:
+
+> **Do not try to make the whole workflow rigid. Make only the epistemically dangerous transitions rigid.**
+
+That gives you the UX you were asking for. It preserves the speed and improvisational value of agents during exploration, but prevents the exact failure mode MLSpec exists to stop: turning messy, partial, underpowered work into strong, durable ML conclusions. That is the point where the provenance work, case-management framing, reproducibility guidance, and agent-trace literature all line up. citeturn1search0turn0search5turn6search2turn2search0
+
+## Open questions and limitations
+
+Some important implementation questions remain open because the infrastructure assumptions are unspecified. The best examples are multi-agent coordination, remote execution trust boundaries, data privacy and secret handling, the choice between strict clean-tree enforcement and dirty-workspace snapshotting, and statistical policies for “decision-grade” claims across different ML domains. The primary sources reviewed here strongly constrain the provenance, case, telemetry, and audit design, but they do not uniquely determine those policy choices. citeturn1search0turn0search5turn6search2turn1search14
+
+The safest next step is therefore not more ontology work. It is a UX prototype that proves four things end to end: the human can mostly stay in chat, the agent can move fast in scratch mode, the CLI can block unsupported upgrades into stronger evidence/decisions, and the system can explain clearly **why** a conclusion is or is not allowed. If those four things work, the rest of MLSpec becomes much easier to iterate. citeturn1search14turn2search0</UX><implementation># MLSpec Implementation Theory
+
+## Executive summary
+
+The implementation that best fits the underlying theory is a **chat-first, agent-mediated, CLI-enforced control plane**. The human should usually talk to an agent, not to the CLI. The agent should plan, edit code, run checks, and propose actions through reusable skills. The CLI should be the narrow waist that owns authoritative state transitions, provenance capture, evidence classification, and decision gating. That division matches the core lessons from PROV’s separation of agents, activities, and entities; CMMN’s case-centric handling of messy, non-linear work; MLflow’s run/artifact telemetry model; Kubeflow’s orchestration and metadata model; VisTrails’ emphasis on preserving exploratory history; PROV-AGENT’s insistence that prompts, responses, and decisions be traceable; and Design Science Research’s focus on building artifacts that solve a real problem and can be evaluated against failure cases. citeturn1search0turn0search5turn0search2turn22search0turn0search19turn13search0turn1search1turn2search0turn1search14
+
+The main implementation consequence is that **fluidity belongs in exploration, and rigidity belongs at epistemically dangerous boundaries**. Code edits, fast tests, and cheap exploratory runs should be easy. But the system should become strict when a run is meant to count as evidence or when a conclusion is meant to become durable: protocol frozen, workspace snapshotted, resources recorded, deviations declared, comparators validated, evidence graded, and decisions audited. That approach is strongly aligned with the scientific-workflow and reproducibility literature, which values exploratory iteration but also requires exact tracking of runs, infrastructure, metrics, and variation before conclusions can be trusted. citeturn1search7turn6search2turn6search18
+
+The best MVP is therefore not a giant platform. It is a small set of typed nouns, a thin CLI with JSON-first machine interfaces and readable human views, a set of agent-facing skills with explicit stop conditions and refusal rules, a SQLite-first state store with a JSONL debug adapter, and an adversarial fixture suite that proves the system prevents overclaiming. Everything else, including tracker integration, orchestration, and dashboards, should be secondary. citeturn1search14turn0search2turn0search19turn1search7
+
+## Implementation architecture
+
+The clean implementation stack is:
+
+1. **Human intent layer** for goals, priorities, and approvals.
+2. **Agent skill layer** for planning, code edits, execution, and explanation.
+3. **MLSpec CLI control plane** for typed state mutations and invariant checks.
+4. **State store** for cases, protocols, runs, evidence, and decisions.
+5. **Execution backends** such as the local repo, test harnesses, MLflow, or Kubeflow.
+
+That layering follows naturally from the source set: PROV gives the traceability grammar, CMMN gives the “evolving case” shell, MLflow and Kubeflow provide sources of execution metadata rather than epistemic truth, and PROV-AGENT extends provenance to agent actions and prompts. citeturn1search0turn0search5turn0search2turn0search19turn13search0turn2search0
+
+```mermaid
+sequenceDiagram
+    participant H as Human
+    participant A as Agent
+    participant S as Skill
+    participant C as MLSpec CLI
+    participant M as MLSpec Store
+    participant R as Repo/Test Harness
+    participant T as Tracker/Orchestrator
+
+    H->>A: "Try label smoothing and tell me if it's worth it"
+    A->>S: select skill(s)
+    S->>C: status / case show / protocol show
+    C->>M: read state
+    M-->>C: current case state
+    C-->>S: JSON result
+    S->>R: patch code, run tests, run smoke or candidate job
+    R->>T: optional metadata/artifacts
+    S->>C: snapshot create / run begin / run end
+    C->>M: persist authoritative records
+    T-->>S: run ids, metrics, artifacts
+    S->>C: evidence classify / audit / decision issue
+    C->>M: validate, downgrade, or block
+    C-->>S: result + warnings + blockers
+    S-->>A: bounded summary
+    A-->>H: what changed, what evidence exists, what is allowed next
+```
+
+The most important architectural choice is that the CLI is **not just a convenience wrapper**. It is the trusted boundary. The agent may use shell tools, edit code, run tests, and even talk to trackers directly, but nothing becomes authoritative MLSpec truth unless it passes through the CLI. That recommendation is a design synthesis, but it is exactly how you preserve the provenance and lifecycle discipline implied by PROV, CMMN, scientific workflows, and agent provenance while still keeping the execution layer flexible. citeturn1search0turn0search5turn1search7turn2search0
+
+## Control flow and skill mechanics
+
+The table below answers the control-flow and skill-mechanics questions directly. These are implementation recommendations derived from the source constraints above; they are not themselves standardized APIs. The strongest source pressure here comes from CMMN’s case-lifecycle thinking, PROV-AGENT’s traceability requirement for agent actions, and DSR’s emphasis on making the artifact evaluable rather than magical. citeturn0search5turn2search0turn1search14
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q1** How does the agent invoke CLI commands? | Yes: one-shot subprocess execution such as `spawn("mlspec", [..., "--json"])` is the right default. If the host runtime has a richer tool API, wrap subprocesses there, but preserve the same semantics. |
+| **Q2** What does the CLI output? | Human-readable text by default; structured JSON with `--json`; ANSI color only when writing to a TTY. Agents should always use `--json`. |
+| **Q3** How does the agent chain commands? | By parsing IDs and fields from JSON responses. Do not scrape human text. Do not rely on temporary files except for explicit artifact paths or `@file` inputs. |
+| **Q4** What goes in `Default next steps` in a skill contract? | A bounded **decision tree**, not vague prose: ordered steps, branch conditions, stop conditions, and escalation rules. |
+| **Q5** When does the agent stop looping and report? | Stop on the first of: requested action complete, meaningful blocker encountered, human approval required, budget exhausted, evidence target reached, or decision blocked with a clear next action. |
+| **Q6** What if a CLI command fails mid-skill? | The skill should classify the failure: `transient`, `user_fix_needed`, `invariant_block`, or `internal_bug`. Recover only from transient or read-only-query failures. Abort on invariant or state-integrity failures. |
+| **Q7** Can skills call other skills? | Yes, but only through a parent orchestration skill. Prefer a shallow tree: one planner skill coordinating several leaf skills. |
+| **Q8** Is a skill just a prompt template? | No. A skill should be **prompt + imperative contract**: inputs, preconditions, steps, required CLI mutations, validations, maximum allowed claim, refusal rules, outputs. |
+| **Q9** How does the agent decide which skill to load? | From intent classification, current case state, and current mode. Use explicit routing heuristics rather than free-form whim. |
+| **Q10** What if no skill matches? | Fall back to a `triage` or `frame_case` skill, not unconstrained free-form action. The fallback skill should narrow the task, ask minimal clarifying questions, and create bounded next steps. |
+
+A strong skill contract is short and machine-legible. It should encode what the agent is allowed to do, what facts must be recorded, and what the strongest allowed claim is. That design directly addresses the agent-failure patterns that PROV-AGENT is concerned with: invisible prompts, undocumented decisions, and weak accountability for downstream effects. citeturn2search0
+
+```text
+SKILL CONTRACT
+Name: run_candidate
+Goal: Execute a protocol-compatible ML experiment and return classified evidence
+Inputs:
+  - case_id
+  - protocol_id
+  - candidate_change_description
+Preconditions:
+  - protocol is locked
+  - workspace can be snapshotted
+  - baseline reference exists for comparative claims
+Default next steps:
+  1. read case/protocol/status
+  2. patch code if needed
+  3. run local validations
+  4. create snapshot
+  5. begin run
+  6. execute job
+  7. end run with actual resources
+  8. classify evidence
+  9. run audit
+Stop conditions:
+  - validation fails
+  - human approval required
+  - evidence reaches target grade
+  - decision is blocked with clear reason
+Maximum allowed claim:
+  - no stronger than returned evidence grade
+Refuse if:
+  - no protocol
+  - no snapshot
+  - comparator is undefined for a comparative claim
+Outputs:
+  - run_id
+  - evidence_id
+  - audit_report
+  - bounded summary
+```
+
+The agent should also route work through **modes**: `scratch`, `structured`, and `decision`. Those modes are not just UI labels; they shape what the agent is allowed to promise. Scratch mode may patch code and run cheap experiments, but it cannot output anything stronger than “debugging signal” or “worth promoting.” Structured mode can create partial or decision-grade evidence. Decision mode can only operate when the prerequisites for issuing a decision are already close to satisfied. This mode split is a direct implementation of the “fluid exploration, rigid conclusion” principle. citeturn1search1turn6search2turn1search14
+
+## Minimal schema and state
+
+The MVP noun set should be **slightly larger than the absolute minimum**, because the theory breaks if protocol, claims, or run snapshots are collapsed away. The right minimum is:
+
+- `Case`
+- `Protocol`
+- `Snapshot`
+- `Run`
+- `Deviation`
+- `Evidence`
+- `Claim`
+- `Decision`
+
+That set is the smallest one that still preserves the critical distinctions between intent, contract, execution, support, and conclusion. PROV strongly supports preserving the difference between entities, activities, agents, and plans; MLflow and Kubeflow strongly support treating runs and artifacts as explicit records rather than incidental byproducts; and reproducibility guidance strongly supports separating procedure, evaluation, and reporting. citeturn1search0turn0search2turn13search0turn6search2
+
+The table below answers the schema questions directly.
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q11** Minimum noun set for MVP? | `Case + Protocol + Snapshot + Run + Evidence + Claim + Decision + Deviation`. `Protocol` is required for any evidence-bearing or decision-bearing work, but optional for pure scratch exploration. |
+| **Q12** Can you have a Decision without a Claim? | No. Every `Decision` must cite exactly one `Claim`, though a case can contain many claims. |
+| **Q13** What is a Claim? | A structured object with at least `statement`, `scope`, `comparator`, and `target_metric`. Free text alone is too weak. |
+| **Q14** Is Artifact required in MVP? | A full first-class `Artifact` table can be deferred if `Snapshot` and `Run.output_refs` exist. But artifact digests and URIs must still be recordable. |
+| **Q15** Is MetricResult required? | It can be nested inside `Evidence` in MVP as a typed list; a separate first-class noun becomes useful once querying gets richer. |
+| **Q16** Exact shape of ResourceBudget? | MVP minimum: `gpu_hours`, `wallclock_hours`, `data_fraction`, `seeds`, `epochs`; plus optional `accelerator_type`, `peak_vram_gb`, and `num_devices`. |
+| **Q17** Is Actor required? | In MVP, a minimal `actor_ref` string on every mutation is enough, with reserved identities such as `human:<id>` and `agent:<id>`. A full `Actor` table can come later. |
+
+A practical MVP shape is below. This is a product design recommendation informed by the source set; it is not copied from any one standard. The closest conceptual scaffolding is PROV’s entity/activity/agent/plan model plus run-centric metadata patterns from MLflow and Kubeflow. citeturn1search0turn0search2turn0search19
+
+```ts
+type Id = string; // UUIDv7
+type ResourceBudget = {
+  gpu_hours: number;
+  wallclock_hours: number;
+  data_fraction: number; // 0..1
+  seeds: number;
+  epochs: number;
+  accelerator_type?: string;
+  peak_vram_gb?: number;
+  num_devices?: number;
+};
+
+type Case = {
+  id: Id;
+  question: string;
+  mode: "scratch" | "structured" | "decision";
+  status: "open" | "ready" | "running" | "observed" | "resolved" | "archived";
+  current_protocol_id?: Id;
+  actor_ref: string;
+  created_at: string;
+};
+
+type Protocol = {
+  id: Id;
+  case_id: Id;
+  version: number;
+  objective: string;
+  baseline_selector?: string;
+  metric_spec: { name: string; direction: "max" | "min"; split: string };
+  required_resources: ResourceBudget;
+  min_decision_grade: "decision_grade" | "replicated";
+  locked_at?: string;
+};
+
+type Snapshot = {
+  id: Id;
+  case_id: Id;
+  commit_hash?: string;
+  dirty_tree: boolean;
+  diff_digest?: string;
+  config_digests: string[];
+  dataset_digests: string[];
+  split_manifest_digest?: string;
+  evaluator_digest?: string;
+  environment_digest?: string;
+  actor_ref: string;
+  created_at: string;
+};
+
+type Run = {
+  id: Id;
+  case_id: Id;
+  protocol_id?: Id;
+  snapshot_id?: Id;
+  kind: "smoke" | "proxy" | "full" | "replication";
+  status: "planned" | "running" | "completed" | "failed" | "aborted";
+  command: string[];
+  tracker_refs: string[];
+  actual_resources?: ResourceBudget;
+  output_refs: string[];
+  started_at?: string;
+  ended_at?: string;
+};
+
+type Deviation = {
+  id: Id;
+  run_id: Id;
+  category: string;
+  severity: "minor" | "material" | "fatal";
+  impact: "none" | "weakens" | "invalidates";
+  note: string;
+};
+
+type Evidence = {
+  id: Id;
+  case_id: Id;
+  run_ids: Id[];
+  metrics: Array<{
+    name: string;
+    split: string;
+    value: number;
+    dispersion?: number;
+    seed?: number;
+  }>;
+  grade: "smoke" | "proxy" | "partial" | "decision_grade" | "replicated" | "invalid";
+  protocol_satisfied: "yes" | "partial" | "no";
+  baseline_run_ids?: Id[];
+  deviation_ids: Id[];
+  summary: string;
+};
+
+type Claim = {
+  id: Id;
+  case_id: Id;
+  statement: string;
+  scope: string;
+  comparator?: string;
+  target_metric?: string;
+};
+
+type Decision = {
+  id: Id;
+  case_id: Id;
+  claim_id: Id;
+  status: "accept" | "reject" | "inconclusive" | "rerun" | "archive";
+  evidence_ids: Id[];
+  rationale: string;
+  actor_ref: string;
+  created_at: string;
+};
+```
+
+The repository or store interface should also be explicit. You asked to see it, and it should be small. PROV and scientific-workflow systems both favor queryable provenance stores; MLflow and Kubeflow likewise center queryable runs and metadata. That implies a thin state repository with typed writes and filtered reads. citeturn1search0turn1search7turn0search2turn13search0
+
+```ts
+interface MLSpecStore {
+  createCase(input: CreateCaseInput): Case;
+  getCase(id: Id): Case | null;
+  listCases(filter?: CaseFilter): Case[];
+
+  draftProtocol(input: DraftProtocolInput): Protocol;
+  lockProtocol(caseId: Id, protocolId: Id): Protocol;
+
+  createSnapshot(input: CreateSnapshotInput): Snapshot;
+
+  beginRun(input: BeginRunInput): Run;
+  endRun(runId: Id, input: EndRunInput): Run;
+
+  recordDeviation(input: RecordDeviationInput): Deviation;
+  classifyEvidence(input: ClassifyEvidenceInput): Evidence;
+
+  createClaim(input: CreateClaimInput): Claim;
+  issueDecision(input: IssueDecisionInput): Decision;
+
+  audit(scope: AuditScope): AuditReport;
+  status(scope: StatusScope): StatusReport;
+}
+```
+
+## Evidence, decisions, and audit
+
+The evidence and decision layer is where the theory becomes implementation. The right model is that the **agent may propose**, but the **CLI computes and enforces**. Specifically, the agent may nominate a baseline, suggest a claim, or request a target evidence grade, but the CLI should compute the actual evidence grade from observed resources, comparability rules, deviations, and protocol thresholds. That recommendation is consistent with the reproducibility literature’s insistence on exact reporting of run conditions and with the central source distinction between telemetry and validity. citeturn6search2turn6search18turn0search2turn1search7
+
+The table below answers the evidence and decision questions directly.
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q18** How is evidence grade computed? | The agent submits candidate inputs; the CLI computes the grade deterministically from protocol thresholds, actual resources, comparability checks, and deviations. |
+| **Q19** Who decides the matched baseline? | The agent or human proposes it; the CLI validates comparability. |
+| **Q20** Exact criteria for `decision_grade`? | Yes: `resource_completeness >= 1.0`, `run.status = completed`, `protocol locked`, `matched baseline` for comparative claims, `split manifest match`, `evaluator digest match`, `no fatal deviations`, `no unresolved material deviations`, `snapshot complete`, and `seed_count >= protocol minimum`; dispersion is required whenever multiple seeds are required or present. |
+| **Q21** What if the agent claims `decision_grade` at 30% resources? | The CLI should **downgrade** the grade to the maximum allowed grade and return warnings. In strict mode, it may also fail the command. |
+| **Q22** How is variance handled? | Required for `decision_grade` whenever protocol demands multiple seeds or multiple runs. If only one seed is required by protocol, dispersion is optional but the limitation must be explicit. |
+| **Q23** What does `inconclusive` mean? | Evidence exists, but it is either too weak, too conflicting, too non-comparable, or too narrow in scope to support `accept` or `reject`. |
+| **Q24** Can you issue `reject` on negative `decision_grade` evidence? | Yes. `decision_grade` measures evidentiary strength, not positivity. Strong negative evidence supports a strong rejection. |
+| **Q25** What does a blocked decision return? | A structured failure object: machine code, blocking invariants, current evidence cap, and suggested next actions. |
+
+A good default evidence rubric is below. These thresholds are recommended defaults, not standardized universal laws. They are justified because the reproducibility checklist and scientific-workflow sources repeatedly emphasize run counts, compute, split/metric comparability, and variation reporting as prerequisites for credible conclusions. citeturn6search2turn6search18turn1search7
+
+| Grade | Default interpretation | Typical allowed output |
+|---|---|---|
+| `smoke` | sanity check, tiny resource fraction, wiring/debug focus | “The pipeline runs / fails in this specific way.” |
+| `proxy` | reduced-budget or reduced-scope signal | “This looks promising enough to promote.” |
+| `partial` | meaningful but incomplete support; missing some requirement | “Preliminary signal under stated limits.” |
+| `decision_grade` | all required conditions for the protocol scope satisfied | “Accept or reject for scope S under protocol P.” |
+| `replicated` | `decision_grade` plus explicit replication requirement satisfied | “Stronger accept/reject recommendation.” |
+| `invalid` | lineage hole, fatal deviation, or comparability failure | “No decision; rerun or repair required.” |
+
+The decision API should be equally strict. A good result object for a blocked decision is:
+
+```json
+{
+  "ok": false,
+  "command": "decision.issue",
+  "code": "INSUFFICIENT_EVIDENCE",
+  "message": "Claim cannot be resolved as accept/reject.",
+  "data": {
+    "claim_id": "clm_01...",
+    "requested_status": "accept",
+    "max_allowed_status": "inconclusive",
+    "evidence_cap": "partial"
+  },
+  "blocking_invariants": [
+    "BASELINE_NOT_COMPARABLE",
+    "RESOURCE_UNDERRUN",
+    "MISSING_DISPERSION"
+  ],
+  "suggested_next_actions": [
+    "rerun with protocol-required seeds=5",
+    "attach matched baseline on identical split+evaluator",
+    "reclassify evidence after rerun"
+  ]
+}
+```
+
+The audit layer should enforce the adversarial cases you care about most: citing planned work as evidence, comparing non-comparable runs, cherry-picking the best run without a selection rule, promoting underpowered runs to decision-grade, issuing decisions without claims, and classifying evidence against a mutable or missing snapshot. Those checks are a direct operationalization of the provenance, reproducibility, and DSR literature: the artifact is only good if it prevents the failure modes it exists to stop. citeturn1search0turn6search2turn1search14
+
+## Human workflow and user stories
+
+The human workflow should be **agent-first and mode-aware**. The human usually gives intent, priorities, and approval thresholds. The agent reads the current case, chooses or asks for mode if ambiguous, executes one or more bounded skills, and returns a concise checkpoint only at meaningful boundaries. That recommendation follows from CMMN’s adaptive work model and from PROV-AGENT’s treatment of agent actions as part of the workflow rather than invisible internal cognition. citeturn0search5turn2search0
+
+The table below answers the human/agent interaction questions.
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q26** How does the agent know the mode? | Infer from utterance + current case status, but let the human override. Default to `scratch` if ambiguous, never `decision`. |
+| **Q27** What does “worth it” mean? | By default: “worth promoting to a more expensive structured run,” not “final accept/reject.” |
+| **Q28** What does the agent say and when? | Not after every command. Report at phase boundaries: plan chosen, blocker found, expensive run requested, evidence classified, or decision/audit completed. |
+| **Q29** Can the human interrupt mid-skill? | Yes. The skill should persist a partial handoff and either stop safely or leave long-running jobs detached but tracked. |
+| **Q30** Can one request trigger multiple skills? | Yes. A planner skill may orchestrate multiple leaf skills for one human request. |
+| **Q31** What does the human see while the agent works? | Concise streaming phase updates by default, with optional verbose command/log detail. |
+| **Q32** How granular are human approvals? | Default: human approves expensive/destructive actions, protocol locks that imply real decision-bearing work, and any final published decision. Cheap local validation can be autonomous. |
+
+Mode inference should be conservative. If a human says, “try label smoothing and tell me if it’s worth it,” the agent should interpret that as scratch or structured mode depending on the existing case, and the output should usually be “worth promoting / not worth promoting / blocked by unknowns,” not “accepted into the system.” That keeps the workflow fluid without sacrificing rigor. The principle is exactly the same one visible in exploratory scientific workflows and reproducibility checklists: fast iteration is fine, but certainty must be earned. citeturn1search1turn6search2
+
+A practical user story matrix is below.
+
+| Scenario | What the human says | What the agent does | What the human gets back |
+|---|---|---|---|
+| Greenfield | “I want to know if X helps under a 12 GPU-hour budget.” | frames case, drafts protocol, patches code if needed, runs validations, promotes candidate runs | case summary, proposed protocol, initial evidence, next cheapest step |
+| Existing MLSpec project | “Try label smoothing and tell me if it’s worth it.” | reads case/protocol/history, patches code, runs scratch or structured experiment, classifies evidence | bounded recommendation tied to current case |
+| Brownfield without MLSpec | “Bring this repo under MLSpec and tell me what we can trust.” | scans repo, tracker, configs, logs; imports what is knowable; marks unknowns; caps legacy evidence; proposes reruns | imported case, confidence gaps, trustable vs untrustable prior results |
+
+The code-change story should be explicit. Nearly all meaningful ML work involves code changes, and MLSpec should treat that as normal. The right ladder is: **patch → validate → smoke → candidate → decision**. The agent can move fluidly through patch and validate, but once the agent wants a run to count as evidence, it must create a snapshot and bind the run to that snapshot. If the code changes again after the run, the past run is not contaminated so long as the run’s snapshot is intact; if no snapshot exists, the evidence should be invalid or capped severely. That is exactly how provenance should protect you from agent drift. citeturn1search0turn0search2turn6search2
+
+The MNIST example becomes much clearer under this model.
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q61** How does the agent know which repo in the MNIST example? | Default to the current working directory or explicitly attached workspace. If ambiguous, ask once. |
+| **Q62** What can the agent do now that it could not do before? | Not just run the experiment, but bind it to a case, snapshot the code/config/data context, grade the evidence, and produce a bounded claim. |
+| **Q63** Roughly how many CLI commands for an end-to-end MNIST story? | Usually 8–14 authoritative CLI calls, plus many non-authoritative shell/test operations. |
+| **Q64** What does the human see when it is done? | A compact summary with: what changed, which run(s) matter, evidence grade, blocked or allowed conclusions, and next actions. |
+
+## CLI, storage, import, and host integration
+
+The CLI should be small, typed, and JSON-first for agents. The core surface should remain close to the theory and avoid free-form mutation endpoints. This is consistent with the strong source pattern that provenance and scientific workflows are most valuable when the lineage is queryable and typed, and that trackers/orchestrators should feed data into a normalized metadata layer rather than becoming the validity layer themselves. citeturn1search0turn1search7turn0search2turn13search0
+
+The exact core command surface I recommend is eight **stateful command groups**:
+
+| Group | Primary verbs | Purpose |
+|---|---|---|
+| `case` | `create`, `show`, `list`, `archive` | case root and status |
+| `protocol` | `draft`, `show`, `lock` | experimental contract |
+| `snapshot` | `create`, `show` | freeze code/config/data/env context |
+| `run` | `begin`, `end`, `show`, `list` | execution record |
+| `evidence` | `classify`, `show` | convert runs into bounded support |
+| `claim` | `create`, `show` | explicit scoped assertion |
+| `decision` | `issue`, `show` | allowed conclusion |
+| `audit` | `run`, `show` | invariant enforcement |
+
+Two additional **non-core views/adapters** are worth having from the start, but they are not part of the minimal stateful surface:
+
+- `status` for a synthesized human/agent overview
+- `import` for brownfield, MLflow, or Kubeflow ingestion
+
+That ordering solves your earlier tension about “eight primitives” versus practical usability: eight groups own authoritative state, while `status` and `import` are projections and ingesters.
+
+The CLI contract should be stable and envelope-based. This answers the command-output questions directly.
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q33** Exact command surface? | The eight groups above. `status` and `import` are auxiliary. |
+| **Q34** Success output shape? | In `--json`, always return a single envelope with `ok`, `command`, `data`, `warnings`, `meta`. |
+| **Q35** Failure output shape? | In `--json`, still return a single envelope, but with `ok: false`, `code`, `message`, `blocking_invariants`, and `suggested_next_actions`; exit non-zero. |
+| **Q36** Does `audit` do pass/fail only? | No. It should return a full invariant report plus a summary severity. |
+| **Q37** What does `status` show? | Human summary by default; machine-readable aggregate state with `--json`. |
+| **Q38** Interactive mode? | Not in MVP. Keep it one-shot and scriptable. Add TUI or REPL later only if needed. |
+| **Q39** `--resources` format? | JSON object or `@file.json`. Do not invent a custom DSL. |
+
+A standard JSON envelope should look like this:
+
+```json
+{
+  "ok": true,
+  "command": "run.begin",
+  "data": {
+    "run_id": "run_01JV...",
+    "case_id": "case_01JV...",
+    "protocol_id": "prot_01JV..."
+  },
+  "warnings": [],
+  "meta": {
+    "schema_version": "0.1.0",
+    "store_revision": 184
+  }
+}
+```
+
+The store should be **SQLite by default**. That gives you typed queries, transactions, indexes, and enough concurrency for small teams without premature infrastructure. A JSONL adapter is still valuable, but mainly for debugging, replication, and fixture authoring. The source base does not prescribe SQLite specifically, but it strongly points toward a queryable metadata store rather than markdown-only state. citeturn1search7turn0search2turn13search0
+
+The storage questions are best answered as follows:
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q45** Is the repository interface defined? | It should be explicitly defined in code, as shown earlier under `MLSpecStore`. |
+| **Q46** How does the agent query state? | Prefer typed `show`, `list`, `status`, and `audit` filters first. Add a generic `query` command later only if needed. |
+| **Q47** How does the JSONL adapter work? | One append-only `events.jsonl` per case under `.mlspec/cases/<case_id>/events.jsonl`; loaders materialize current state from events. |
+| **Q48** What happens to IDs? | Use store-generated UUIDv7 identifiers so writes are sortable and globally unique. |
+| **Q49** How does the agent get the latest case ID? | From the JSON envelope returned by the command. Optional convenience: `.mlspec/session.json` may store current context, but agents should not rely solely on ambient state. |
+
+A practical on-disk shape is:
+
+```text
+.mlspec/
+  config.yaml
+  state.sqlite                 # canonical store
+  session.json                 # optional current context
+  cases/
+    case_01JV.../
+      events.jsonl             # optional debug/event mirror
+      projections/
+        summary.md
+        audit.json
+```
+
+Brownfield import should be strict about what is truly knowable. This directly follows from provenance and scientific-workflow practice: inferred lineage must not be confused with observed lineage. citeturn1search0turn1search7
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q40** What can we infer automatically? | Often: tracker type, experiment/run names, metric names, config files, coarse dataset names, rough baseline candidates. Rarely: split equivalence, evaluator equivalence, exact dataset digests, or valid comparator identity without explicit artifacts. |
+| **Q41** How does the agent know what to import? | Start by scanning the current repo and common tracker locations; ask the human only if multiple plausible roots or trackers exist. |
+| **Q42** What does “mark unknowns” mean? | Persist `null` or `unknown` values plus a `confidence`/`verification_required` marker. Do not silently backfill. |
+| **Q43** What is the import UX? | Yes: the human can say “bring this repo under MLSpec,” and the agent should do the scan, infer what it can, mark gaps, and return a trust report. |
+| **Q44** How does the agent know the tracker? | Detect via lockfiles, imports, env vars, config files, directories like `mlruns/`, Kubeflow manifests, or CI scripts. |
+
+The host-runtime questions about OpenCode are necessarily more tentative because those specifics were not part of the reviewed standards and primary sources. The safest approach is to build MLSpec so that host-specific command or skill discovery is only a thin wrapper over the same internal contracts.
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q56** How does a skill trigger a subagent in OpenCode? | If OpenCode supports subagent frontmatter such as `agent: "plan"`, use it as a host wrapper around the planner skill. Do not make MLSpec semantics depend on that specific mechanism. |
+| **Q57** Can skills use tools beyond the CLI? | Yes. They should be allowed to use repo tools like `pytest`, training scripts, linters, and tracker APIs, but only the CLI should change authoritative MLSpec state. |
+| **Q58** Difference between an OpenCode command and a skill? | A command is a user-visible entrypoint; a skill is a reusable capability the agent can call internally. `/mlspec` is a power-user/manual entrypoint, not the primary UX. |
+| **Q59** How does a skill get discovered? | If OpenCode auto-indexes `.opencode/skills/*/SKILL.md`, use that. If not, register skills explicitly. Treat discovery as host-runtime configuration, not MLSpec core logic. |
+| **Q60** What permissions should the skill/agent have? | Use least-privilege profiles: local read/write repo access for patch skills, shell/test permissions for validation skills, explicit approval for destructive or expensive operations, and no raw secret storage in MLSpec state. |
+
+## Adversarial cases, testing, and operations
+
+The adversarial cases must be turned into executable tests. That is the most faithful implementation of Design Science Research: the artifact is not judged by elegance but by whether it prevents the failures it exists to prevent. The reproducibility sources also strongly support this posture, because they repeatedly identify hidden variability, underreporting, and non-comparability as central causes of bad conclusions. citeturn1search14turn6search2turn6search18
+
+The table below answers the adversarial questions directly.
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q50** How do we catch “agent claims success from intention”? | `run.end` must require observed status and actual outputs; evidence can only cite `completed` observed runs. |
+| **Q51** How do we catch “agent cites planned run as evidence”? | The CLI should reject any evidence citation whose run status is not `completed`, with a specific invariant like `PLANNED_RUN_NOT_EVIDENCE`. |
+| **Q52** How do we catch cherry-picking? | `audit` should group sibling runs by protocol + snapshot family + comparator and flag claims that cite only a favorable subset without a declared `selection_rule`. |
+| **Q53** What if agent edits code after a run and before evidence classification? | If the run has a valid snapshot, the run remains valid and evidence references that snapshot; if no snapshot exists, the evidence should be invalid or capped. |
+| **Q54** What if a human bypasses the agent? | Direct CLI use is fine; invariants still hold. Bypassing both agent and CLI by editing the store should be detectable via append-only logs or signatures. |
+| **Q55** What if the agent repeats the same experiment and picks the better result? | Group runs by protocol/snapshot/resource signature and require either an explicit selection rule or aggregate reporting across sibling runs. |
+
+Testing MLSpec itself should happen at three levels.
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q65** How do we test MLSpec itself? | With adversarial fixtures that attempt to produce unsupported evidence or decisions. |
+| **Q66** What is the test strategy? | Unit tests for grading/invariants, property tests for state transitions, integration tests for end-to-end stories, and golden transcript tests for agent skill behavior. |
+| **Q67** Who runs the adversarial fixtures? | CI should always run them; humans and agents should also be able to run them locally. |
+
+A good adversarial fixture pack should include at least:
+
+- planned run cited as evidence
+- failed run cited as success
+- wrong split matched as baseline
+- evaluator script drift hidden under same metric name
+- underpowered run promoted to decision-grade
+- single lucky run cherry-picked from siblings
+- dirty workspace without snapshot
+- after-the-fact brownfield import that tries to invent dataset lineage
+- decision issued without claim
+- code edited after evidence-bearing run and current workspace mistakenly treated as the run context
+
+Operationally, MLSpec should ship first as a **package plus `mlspec init`**. That makes the installation and upgrade story answerable without requiring a huge platform.
+
+| Question | Recommended implementation answer |
+|---|---|
+| **Q68** What does “install MLSpec into a project” mean? | Install the package, run `mlspec init`, create `.mlspec/`, configure adapters, and optionally install agent skill files/templates. |
+| **Q69** Is there an `mlspec init` command? | Yes. It should scaffold config, store, sample skills/contracts, and basic ignore/projection files. |
+| **Q70** Upgrade story? | Version the schema and run store migrations; version skills separately from schema. |
+| **Q71** Is there a Web UI? | Not required for MVP. A read-only dashboard can come later, but agent/chat + CLI is enough initially. |
+| **Q72** Multi-user story? | Start with single-writer local SQLite; add optimistic concurrency or server-backed storage later if teams need concurrent writes. |
+| **Q73** Cloud execution story? | MLSpec remains the control plane. Runs may execute locally or remotely through adapters; authoritative state still flows through the CLI/store. |
+| **Q74** Secrets and credentials? | Yes, they matter. MLSpec should store references to secret sources, never the secrets themselves. Use host env vars or secret managers. |
+
+The most sensible first implementation sequence is therefore short:
+
+1. Implement the typed store and the eight CLI groups.
+2. Add snapshotting, evidence grading, and audit before building fancy integrations.
+3. Add one chat-facing planner skill and three leaf skills: `frame_case`, `patch_code`, `run_candidate`.
+4. Add the adversarial fixture pack and CI gating.
+5. Only then add MLflow import and status projections, followed by Kubeflow import if needed.
+
+That ordering is the best match to the source-implied risk profile: provenance, lifecycle, and validity come first; orchestration breadth comes later. citeturn1search0turn1search14turn0search2turn0search19
+
+If you want the shortest practical reading path while implementing, start with urlPROV-DMturn1search0, then urlCMMN specificationturn0search5, then urlMLflow Tracking docsturn0search2 and urlMLflow System Metrics docsturn22search0, then urlKubeflow Pipelines docsturn0search19 and urlKubeflow ML Metadata docsturn13search0, then urlVisTrailsturn1search1, urlPROV-AGENTturn2search0, urlDesign Science in Information Systems Researchturn1search14, and urlMachine Learning Reproducibility Checklist v2.0turn6search2. Those are the sources with the highest implementation leverage for the design you are actually trying to build.</implementation></ideaollogy>
+<external-docs><opencode><command-docs>Commands
+Create custom commands for repetitive tasks.
+
+Custom commands let you specify a prompt you want to run when that command is executed in the TUI.
+
+/my-command
+
+Custom commands are in addition to the built-in commands like /init, /undo, /redo, /share, /help. Learn more.
+
+Create command files
+Create markdown files in the commands/ directory to define custom commands.
+
+Create .opencode/commands/test.md:
+
+.opencode/commands/test.md
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+
+The frontmatter defines command properties. The content becomes the template.
+
+Use the command by typing / followed by the command name.
+
+"/test"
+
+Configure
+You can add custom commands through the OpenCode config or by creating markdown files in the commands/ directory.
+
+JSON
+Use the command option in your OpenCode config:
+
+opencode.jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+
+Now you can run this command in the TUI:
+
+/test
+
+Markdown
+You can also define commands using markdown files. Place them in:
+
+Global: ~/.config/opencode/commands/
+Per-project: .opencode/commands/
+~/.config/opencode/commands/test.md
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+
+The markdown file name becomes the command name. For example, test.md lets you run:
+
+/test
+
+Prompt config
+The prompts for the custom commands support several special placeholders and syntax.
+
+Arguments
+Pass arguments to commands using the $ARGUMENTS placeholder.
+
+.opencode/commands/component.md
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+
+Run the command with arguments:
+
+/component Button
+
+And $ARGUMENTS will be replaced with Button.
+
+You can also access individual arguments using positional parameters:
+
+$1 - First argument
+$2 - Second argument
+$3 - Third argument
+And so on…
+For example:
+
+.opencode/commands/create-file.md
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+
+Run the command:
+
+/create-file config.json src "{ \"key\": \"value\" }"
+
+This replaces:
+
+$1 with config.json
+$2 with src
+$3 with { "key": "value" }
+Shell output
+Use !command to inject bash command output into your prompt.
+
+For example, to create a custom command that analyzes test coverage:
+
+.opencode/commands/analyze-coverage.md
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+
+Or to review recent changes:
+
+.opencode/commands/review-changes.md
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+
+Commands run in your project’s root directory and their output becomes part of the prompt.
+
+File references
+Include files in your command using @ followed by the filename.
+
+.opencode/commands/review-component.md
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+
+The file content gets included in the prompt automatically.
+
+Options
+Let’s look at the configuration options in detail.
+
+Template
+The template option defines the prompt that will be sent to the LLM when the command is executed.
+
+opencode.json
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+
+This is a required config option.
+
+Description
+Use the description option to provide a brief description of what the command does.
+
+opencode.json
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+
+This is shown as the description in the TUI when you type in the command.
+
+Agent
+Use the agent config to optionally specify which agent should execute this command. If this is a subagent the command will trigger a subagent invocation by default. To disable this behavior, set subtask to false.
+
+opencode.json
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+
+This is an optional config option. If not specified, defaults to your current agent.
+
+Subtask
+Use the subtask boolean to force the command to trigger a subagent invocation. This is useful if you want the command to not pollute your primary context and will force the agent to act as a subagent, even if mode is set to primary on the agent configuration.
+
+opencode.json
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+
+This is an optional config option.
+
+Model
+Use the model config to override the default model for this command.
+
+opencode.json
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+
+This is an optional config option.
+
+Built-in
+opencode includes several built-in commands like /init, /undo, /redo, /share, /help; learn more.
+
+Note
+
+Custom commands can override built-in commands.
+
+If you define a custom command with the same name, it will override the built-in command.
+
+</command-docs><skill-docs>Agent Skills
+Define reusable behavior via SKILL.md definitions
+
+Agent skills let OpenCode discover reusable instructions from your repo or home directory. Skills are loaded on-demand via the native skill tool—agents see available skills and can load the full content when needed.
+
+Place files
+Create one folder per skill name and put a SKILL.md inside it. OpenCode searches these locations:
+
+Project config: .opencode/skills/<name>/SKILL.md
+Global config: ~/.config/opencode/skills/<name>/SKILL.md
+Project Claude-compatible: .claude/skills/<name>/SKILL.md
+Global Claude-compatible: ~/.claude/skills/<name>/SKILL.md
+Project agent-compatible: .agents/skills/<name>/SKILL.md
+Global agent-compatible: ~/.agents/skills/<name>/SKILL.md
+Understand discovery
+For project-local paths, OpenCode walks up from your current working directory until it reaches the git worktree. It loads any matching skills/*/SKILL.md in .opencode/ and any matching .claude/skills/*/SKILL.md or .agents/skills/*/SKILL.md along the way.
+
+Global definitions are also loaded from ~/.config/opencode/skills/*/SKILL.md, ~/.claude/skills/*/SKILL.md, and ~/.agents/skills/*/SKILL.md.
+
+Write frontmatter
+Each SKILL.md must start with YAML frontmatter. Only these fields are recognized:
+
+name (required)
+description (required)
+license (optional)
+compatibility (optional)
+metadata (optional, string-to-string map)
+Unknown frontmatter fields are ignored.
+
+Validate names
+name must:
+
+Be 1–64 characters
+Be lowercase alphanumeric with single hyphen separators
+Not start or end with -
+Not contain consecutive --
+Match the directory name that contains SKILL.md
+Equivalent regex:
+
+^[a-z0-9]+(-[a-z0-9]+)*$
+
+Follow length rules
+description must be 1-1024 characters. Keep it specific enough for the agent to choose correctly.
+
+Use an example
+Create .opencode/skills/git-release/SKILL.md like this:
+
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+
+Recognize tool description
+OpenCode lists available skills in the skill tool description. Each entry includes the skill name and description:
+
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+
+The agent loads a skill by calling the tool:
+
+skill({ name: "git-release" })
+
+Configure permissions
+Control which skills agents can access using pattern-based permissions in opencode.json:
+
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+
+Permission	Behavior
+allow	Skill loads immediately
+deny	Skill hidden from agent, access rejected
+ask	User prompted for approval before loading
+Patterns support wildcards: internal-* matches internal-docs, internal-tools, etc.
+
+Override per agent
+Give specific agents different permissions than the global defaults.
+
+For custom agents (in agent frontmatter):
+
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+
+For built-in agents (in opencode.json):
+
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+
+Disable the skill tool
+Completely disable skills for agents that shouldn’t use them:
+
+For custom agents:
+
+---
+tools:
+  skill: false
+---
+
+For built-in agents:
+
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+
+When disabled, the <available_skills> section is omitted entirely.
+
+Troubleshoot loading
+If a skill does not show up:
+
+Verify SKILL.md is spelled in all caps
+Check that frontmatter includes name and description
+Ensure skill names are unique across all locations
+Check permissions—skills with deny are hidden from agents</skill-docs>></opencode></external-docs>r
