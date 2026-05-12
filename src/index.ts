@@ -631,14 +631,18 @@ async function handleImport(subcmd: string | undefined, args: string[]): Promise
 async function handleInit(args: string[]): Promise<CommandResult<unknown>> {
   const { mkdirSync, cpSync, existsSync } = await import("fs");
   const path = await import("path");
+  const { fileURLToPath } = await import("url");
 
   // Create .mlspec directory
   mkdirSync(".mlspec", { recursive: true });
 
-  // Install skills to .opencode/skills/
-  const srcSkills = path.join(process.cwd(), "src", "skills");
+  // Find mlspec package root (where this script is installed)
+  const mlspecDir = path.dirname(fileURLToPath(import.meta.url));
+  const packageRoot = path.join(mlspecDir, "..");
+  const srcSkills = path.join(packageRoot, "src", "skills");
   const destSkills = path.join(process.cwd(), ".opencode", "skills");
 
+  // Install skills to .opencode/skills/
   if (existsSync(srcSkills)) {
     mkdirSync(".opencode", { recursive: true });
     mkdirSync(destSkills, { recursive: true });
