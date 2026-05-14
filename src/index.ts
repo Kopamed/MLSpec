@@ -473,7 +473,7 @@ async function handleEvidence(subcmd: string | undefined, args: string[]): Promi
       });
       const input: any = {
         case_id: values["case-id"] as string,
-        run_ids: (values["run-ids"] as string).split(","),
+        run_ids: values["run-ids"] ? (values["run-ids"] as string).split(",") : [],
         metrics: [],
         actor_ref: values["actor-ref"] as string ?? "unknown",
       };
